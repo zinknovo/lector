@@ -20,7 +20,7 @@ class MarketTrendOutput(BaseModel):
 
 
 def _fallback(category: str, evidence: str) -> MarketTrendOutput:
-    usable = evidence and "占位结果" not in evidence
+    usable = bool(evidence)
     summary = (
         f"已检索 {category} 的市场信号，但当前无法完成模型结构化分析。"
         if usable
