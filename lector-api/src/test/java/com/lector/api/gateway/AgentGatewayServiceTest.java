@@ -11,6 +11,7 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.web.reactive.function.client.WebClient;
+import org.springframework.core.io.buffer.DataBufferUtils;
 
 class AgentGatewayServiceTest {
     private HttpServer upstream;
@@ -25,6 +26,18 @@ class AgentGatewayServiceTest {
             byte[] response = "{\"status\":\"started\"}".getBytes(StandardCharsets.UTF_8);
             exchange.getResponseHeaders().add("Content-Type", "application/json");
             exchange.sendResponseHeaders(202, response.length);
+            exchange.getResponseBody().write(response);
+            exchange.close();
+        });
+        upstream.createContext("/api/files/thread/report.pdf", exchange -> {
+            byte[] response = new byte[512 * 1024];
+            exchange.sendResponseHeaders(200, response.length);
+            exchange.getResponseBody().write(response);
+            exchange.close();
+        });
+        upstream.createContext("/api/error", exchange -> {
+            byte[] response = "invalid".getBytes(StandardCharsets.UTF_8);
+            exchange.sendResponseHeaders(422, response.length);
             exchange.getResponseBody().write(response);
             exchange.close();
         });
@@ -46,5 +59,27 @@ class AgentGatewayServiceTest {
         assertEquals(202, response.getStatusCode().value());
         assertEquals("application/json", response.getHeaders().getContentType().toString());
         org.junit.jupiter.api.Assertions.assertTrue(requestBody.get().contains("earbuds"));
+        var body = DataBufferUtils.join(response.getBody()).block();
+        assertEquals("{\"status\":\"started\"}", body.toString(StandardCharsets.UTF_8));
+        DataBufferUtils.release(body);
+    }
+
+    @Test
+    void streamsFilesLargerThanDefaultWebClientBuffer() {
+        var response = service.get("/api/files/thread/report.pdf").block();
+        var body = DataBufferUtils.join(response.getBody()).block();
+
+        assertEquals(512 * 1024, body.readableByteCount());
+        DataBufferUtils.release(body);
+    }
+
+    @Test
+    void preservesUpstreamErrorStatusAndBody() {
+        var response = service.get("/api/error").block();
+        var body = DataBufferUtils.join(response.getBody()).block();
+
+        assertEquals(422, response.getStatusCode().value());
+        assertEquals("invalid", body.toString(StandardCharsets.UTF_8));
+        DataBufferUtils.release(body);
     }
 }

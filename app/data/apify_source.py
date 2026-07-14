@@ -1,6 +1,9 @@
 """Apify Amazon Scraper product data source."""
 
+import asyncio
 import os
+import time
+from datetime import timedelta
 from decimal import Decimal
 from typing import Any
 
@@ -35,6 +38,9 @@ class ApifyAmazonDataSource(ProductDataSource):
         api_token: str | None = None,
         actor_id: str | None = None,
         cache: ProductSearchCache | None = None,
+        request_timeout_seconds: float | None = None,
+        max_retries: int = 4,
+        use_cache: bool = True,
     ) -> None:
         self._api_token = api_token or os.environ.get("APIFY_API_TOKEN")
         if not self._api_token:
@@ -45,6 +51,13 @@ class ApifyAmazonDataSource(ProductDataSource):
             "APIFY_AMAZON_ACTOR_ID", self.DEFAULT_ACTOR_ID
         )
         self._cache = cache or ProductSearchCache()
+        self._max_retries = max_retries
+        self._use_cache = use_cache
+        self._request_timeout_seconds = request_timeout_seconds or float(
+            os.environ.get("APIFY_TIMEOUT_SECONDS", "300")
+        )
+        if self._request_timeout_seconds <= 0:
+            raise DataSourceError("APIFY_TIMEOUT_SECONDS must be positive")
 
     async def search(self, query: str, **filters) -> list[Product]:
         """Search Amazon for products matching the query.
@@ -53,9 +66,12 @@ class ApifyAmazonDataSource(ProductDataSource):
         are applied to the returned items.
         """
         cache_filters = dict(filters)
-        cached = self._cache.get(self._actor_id, query, cache_filters)
-        if cached is not None:
-            return _apply_filters(cached, filters)
+        if self._use_cache:
+            cached = await asyncio.to_thread(
+                self._cache.get, self._actor_id, query, cache_filters
+            )
+            if cached is not None:
+                return _apply_filters(cached, filters)
 
         try:
             from apify_client import ApifyClient
@@ -64,7 +80,6 @@ class ApifyAmazonDataSource(ProductDataSource):
                 "apify-client is not installed; run `uv sync` to install it."
             ) from exc
 
-        client = ApifyClient(self._api_token)
         max_results = filters.get("max_results", 20)
         run_input: dict[str, Any] = {
             "searchQueries": [query],
@@ -73,17 +88,52 @@ class ApifyAmazonDataSource(ProductDataSource):
             "maxSearchPages": filters.get("max_search_pages", 1),
         }
 
-        try:
-            run = client.actor(self._actor_id).call(run_input=run_input)
+        def fetch_items() -> list[dict[str, Any]]:
+            deadline = time.monotonic() + self._request_timeout_seconds
+
+            def remaining() -> timedelta:
+                seconds = max(0.1, deadline - time.monotonic())
+                return timedelta(seconds=seconds)
+
+            request_timeout = remaining()
+            client = ApifyClient(
+                self._api_token,
+                max_retries=self._max_retries,
+                timeout_short=request_timeout,
+                timeout_medium=request_timeout,
+                timeout_long=request_timeout,
+                timeout_max=request_timeout,
+            )
+            run_timeout = remaining()
+            started = client.actor(self._actor_id).start(
+                run_input=run_input,
+                run_timeout=run_timeout,
+                timeout=run_timeout,
+            )
+            wait_timeout = remaining()
+            run = client.run(str(started.id)).wait_for_finish(
+                wait_duration=wait_timeout,
+                timeout=wait_timeout,
+            )
+            if run is None:
+                raise TimeoutError("Apify Actor did not finish before deadline")
             dataset_id = _dataset_id_from_run(run)
-            items = list(client.dataset(dataset_id).iterate_items())
+            return list(
+                client.dataset(dataset_id).iterate_items(timeout=remaining())
+            )
+
+        try:
+            items = await asyncio.to_thread(fetch_items)
         except Exception as exc:
             raise DataSourceError(
                 f"Apify Actor {self._actor_id} failed for query {query!r}"
             ) from exc
 
         products = [_map_apify_item(item) for item in items]
-        self._cache.set(self._actor_id, query, cache_filters, products)
+        if self._use_cache:
+            await asyncio.to_thread(
+                self._cache.set, self._actor_id, query, cache_filters, products
+            )
         return _apply_filters(products, filters)
 
     async def get_by_id(self, product_id: str) -> Product | None:

@@ -10,11 +10,14 @@ import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.ResponseEntity;
+import org.springframework.core.io.buffer.DataBuffer;
+import org.springframework.core.io.buffer.DefaultDataBufferFactory;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.test.web.reactive.server.WebTestClient;
 import org.springframework.web.reactive.function.client.WebClient;
 import reactor.core.publisher.Mono;
+import reactor.core.publisher.Flux;
 
 class AgentGatewayControllerTest {
     static class FakeService extends AgentGatewayService {
@@ -26,9 +29,17 @@ class AgentGatewayControllerTest {
         }
 
         @Override
-        public Mono<ResponseEntity<byte[]>> postJson(String path, Object body) {
+        public Mono<ResponseEntity<Flux<DataBuffer>>> postJson(String path, Object body) {
             calls.incrementAndGet();
-            return Mono.just(ResponseEntity.ok(response));
+            DataBuffer buffer = DefaultDataBufferFactory.sharedInstance.wrap(response);
+            return Mono.just(ResponseEntity.ok(Flux.just(buffer)));
+        }
+
+        @Override
+        public Mono<ResponseEntity<Flux<DataBuffer>>> get(String path) {
+            calls.incrementAndGet();
+            DataBuffer buffer = DefaultDataBufferFactory.sharedInstance.wrap(response);
+            return Mono.just(ResponseEntity.ok(Flux.just(buffer)));
         }
     }
 

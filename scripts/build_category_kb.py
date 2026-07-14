@@ -1,19 +1,28 @@
 """Validate, embed and index category knowledge cards in OpenSearch."""
 
+import argparse
 import asyncio
 import json
 import os
+import sys
 from collections.abc import Awaitable, Callable
 from pathlib import Path
 from typing import Any
 
+from dotenv import load_dotenv
 from opensearchpy import OpenSearch
 from pydantic import BaseModel
 
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
+
 from app.recall.category_kb import CategoryCard
+from app.recall.opensearch_config import opensearch_connection_settings
 from scripts.etl.admit import admit
 
-CARDS_PATH = Path("data/category_cards.jsonl")
+load_dotenv(ROOT / ".env")
+
+CARDS_PATH = ROOT / "data/category_cards.jsonl"
 INDEX_NAME = os.environ.get("CATEGORY_KB_INDEX", "lector_category_kb")
 VECTOR_DIM = 1024
 
@@ -92,18 +101,19 @@ async def build_category_kb(
 
 
 def _get_client() -> OpenSearch:
-    return OpenSearch(
-        hosts=[{"host": os.environ["OPENSEARCH_HOST"], "port": 9200}],
-        http_auth=(os.environ["OPENSEARCH_USER"], os.environ["OPENSEARCH_PASS"]),
-        use_ssl=False,
-    )
+    return OpenSearch(**opensearch_connection_settings())
 
 
 def main() -> None:
+    parser = argparse.ArgumentParser(
+        description="Build the Lector category knowledge index"
+    )
+    parser.add_argument("--cards-path", type=Path, default=CARDS_PATH)
+    args = parser.parse_args()
     from app.recall.towers import tower_client
 
     result = asyncio.run(
-        build_category_kb(CARDS_PATH, _get_client(), tower_client.encode_query)
+        build_category_kb(args.cards_path, _get_client(), tower_client.encode_query)
     )
     print(result.model_dump_json())
 

@@ -106,6 +106,66 @@ class TestApifyAmazonDataSource:
         assert product.rating == 4.5
         assert product.review_count == 123
 
+    def test_search_passes_native_deadlines_to_apify_client(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        captured = {}
+
+        class Cache:
+            def get(self, source, query, filters):
+                return None
+
+            def set(self, source, query, filters, products):
+                captured["cached"] = len(products)
+
+        class Actor:
+            def start(self, **kwargs):
+                captured["start"] = kwargs
+                return type("StartedRun", (), {"id": "run-1"})()
+
+        class Run:
+            def wait_for_finish(self, **kwargs):
+                captured["wait"] = kwargs
+                return {"defaultDatasetId": "dataset-1"}
+
+        class Dataset:
+            def iterate_items(self, **kwargs):
+                captured["dataset"] = kwargs
+                return iter(
+                    [{"asin": "B001", "name": "Earbuds", "price": 20}]
+                )
+
+        class Client:
+            def __init__(self, token, **kwargs):
+                captured["client"] = kwargs
+
+            def actor(self, actor_id):
+                return Actor()
+
+            def dataset(self, dataset_id):
+                return Dataset()
+
+            def run(self, run_id):
+                assert run_id == "run-1"
+                return Run()
+
+        monkeypatch.setattr("apify_client.ApifyClient", Client)
+        source = ApifyAmazonDataSource(
+            api_token="fake-token",
+            cache=Cache(),  # pyright: ignore[reportArgumentType]
+            request_timeout_seconds=2,
+        )
+
+        products = asyncio.run(source.search("earbuds", limit=1))
+
+        assert products[0].product_id == "B001"
+        assert captured["cached"] == 1
+        assert captured["client"]["timeout_max"].total_seconds() <= 2
+        assert captured["client"]["max_retries"] == 4
+        assert captured["start"]["timeout"].total_seconds() <= 2
+        assert captured["wait"]["timeout"].total_seconds() <= 2
+        assert captured["dataset"]["timeout"].total_seconds() <= 2
+
 
 class TestFactory:
     def test_use_mock_true_returns_mock(self, monkeypatch: pytest.MonkeyPatch) -> None:

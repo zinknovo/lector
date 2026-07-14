@@ -6,6 +6,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.codec.multipart.FilePart;
+import org.springframework.core.io.buffer.DataBuffer;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -16,6 +17,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
 import reactor.core.publisher.Mono;
+import reactor.core.publisher.Flux;
 
 @RestController
 @RequestMapping("/api")
@@ -29,28 +31,29 @@ public class AgentGatewayController {
     }
 
     @PostMapping(value = "/task", consumes = MediaType.APPLICATION_JSON_VALUE)
-    public Mono<ResponseEntity<byte[]>> createTask(@RequestBody Map<String, Object> payload) {
+    public Mono<ResponseEntity<Flux<DataBuffer>>> createTask(
+        @RequestBody Map<String, Object> payload) {
         return service.postJson("/api/task", payload);
     }
 
     @PostMapping("/task/{threadId}/cancel")
-    public Mono<ResponseEntity<byte[]>> cancelTask(@PathVariable String threadId) {
+    public Mono<ResponseEntity<Flux<DataBuffer>>> cancelTask(@PathVariable String threadId) {
         requireThreadId(threadId);
         return service.post("/api/task/" + threadId + "/cancel");
     }
 
     @GetMapping("/files/{threadId}/{filename}")
-    public Mono<ResponseEntity<byte[]>> download(
+    public Mono<ResponseEntity<Flux<DataBuffer>>> download(
         @PathVariable String threadId, @PathVariable String filename) {
         requireThreadId(threadId);
         if (!FILENAME.matcher(filename).matches()) {
-            throw new ResponseStatusException(HttpStatus.UNPROCESSABLE_ENTITY, "invalid filename");
+            throw new ResponseStatusException(HttpStatus.UNPROCESSABLE_CONTENT, "invalid filename");
         }
         return service.get("/api/files/" + threadId + "/" + filename);
     }
 
     @PostMapping(value = "/upload", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    public Mono<ResponseEntity<byte[]>> upload(
+    public Mono<ResponseEntity<Flux<DataBuffer>>> upload(
         @RequestParam("thread_id") String threadId,
         @RequestPart("file") FilePart file) {
         requireThreadId(threadId);
@@ -59,7 +62,7 @@ public class AgentGatewayController {
 
     private static void requireThreadId(String threadId) {
         if (!THREAD_ID.matcher(threadId).matches()) {
-            throw new ResponseStatusException(HttpStatus.UNPROCESSABLE_ENTITY, "invalid thread_id");
+            throw new ResponseStatusException(HttpStatus.UNPROCESSABLE_CONTENT, "invalid thread_id");
         }
     }
 }

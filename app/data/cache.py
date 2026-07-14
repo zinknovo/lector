@@ -48,6 +48,7 @@ class ProductSearchCache:
                 self._mongodb_url,
                 serverSelectionTimeoutMS=500,
                 connectTimeoutMS=500,
+                socketTimeoutMS=500,
             )
             collection = client[self._db_name][self._collection_name]
             if self._ttl_days > 0:

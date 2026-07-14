@@ -5,7 +5,7 @@ services:
     image: mongo:8.0.14
     restart: unless-stopped
     ports:
-      - "27017:27017"
+      - "127.0.0.1:27017:27017"
     volumes:
       - mongodb-data:/data/db
     healthcheck:
@@ -22,8 +22,8 @@ services:
       plugins.security.disabled: "true"
       OPENSEARCH_JAVA_OPTS: "-Xms512m -Xmx512m"
     ports:
-      - "9200:9200"
-      - "9600:9600"
+      - "127.0.0.1:9200:9200"
+      - "127.0.0.1:9600:9600"
     volumes:
       - opensearch-data:/usr/share/opensearch/data
     healthcheck:
@@ -40,7 +40,7 @@ services:
     environment:
       TOWER_MODEL: BAAI/bge-m3
     ports:
-      - "8001:8001"
+      - "127.0.0.1:8001:8001"
     volumes:
       - huggingface-cache:/models/huggingface
     healthcheck:
@@ -66,7 +66,7 @@ services:
       CATEGORY_KB_INDEX: lector_category_kb
       CATEGORY_KB_SEARCH_PIPELINE: lector_hybrid_pipeline
     ports:
-      - "8000:8000"
+      - "127.0.0.1:8000:8000"
     depends_on:
       mongodb:
         condition: service_healthy
@@ -87,7 +87,7 @@ services:
       LECTOR_RATE_CAPACITY: ${LECTOR_RATE_CAPACITY:-60}
       LECTOR_RATE_REFILL_PER_MINUTE: ${LECTOR_RATE_REFILL_PER_MINUTE:-60}
     ports:
-      - "8080:8080"
+      - "127.0.0.1:8080:8080"
     depends_on:
       - agent
 
@@ -98,8 +98,10 @@ services:
     restart: unless-stopped
     environment:
       LECTOR_API_KEY: ${LECTOR_API_KEY:-local-dev-only}
+      FRONTEND_USERNAME: ${FRONTEND_USERNAME:-lector}
+      FRONTEND_PASSWORD: ${FRONTEND_PASSWORD:-local-dev-only}
     ports:
-      - "5173:80"
+      - "127.0.0.1:5173:80"
     depends_on:
       - gateway
 

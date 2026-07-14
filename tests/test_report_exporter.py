@@ -40,7 +40,10 @@ def test_export_selection_report_writes_pdf_and_xlsx(tmp_path: Path) -> None:
     assert exported.pdf_path.is_absolute()
     assert exported.xlsx_path.is_absolute()
     assert exported.pdf_path.read_bytes().startswith(b"%PDF")
-    assert b"/Type /Page" in exported.pdf_path.read_bytes()
+    pdf_bytes = exported.pdf_path.read_bytes()
+    assert b"/Type /Page" in pdf_bytes
+    assert b"NotoSansSC" in pdf_bytes
+    assert b"/FontFile2" in pdf_bytes
 
     workbook = load_workbook(exported.xlsx_path, data_only=False)
     sheet = workbook["Selection Report"]

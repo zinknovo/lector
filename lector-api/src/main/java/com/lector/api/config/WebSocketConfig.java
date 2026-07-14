@@ -13,7 +13,7 @@ public class WebSocketConfig {
     @Bean
     HandlerMapping webSocketMapping(AgentWebSocketHandler handler) {
         SimpleUrlHandlerMapping mapping = new SimpleUrlHandlerMapping();
-        mapping.setUrlMap(Map.of("/ws/**", handler));
+        mapping.setUrlMap(Map.of("/ws/*", handler));
         mapping.setOrder(-1);
         return mapping;
     }

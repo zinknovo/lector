@@ -15,7 +15,11 @@ cp .env.example .env
   独立 Provider。当前后端不支持内置搜索时，检查会明确返回 `skipped` 或 `fail`，
   不会伪造结果。
 - `LECTOR_API_KEY` 是 Java 网关与反向代理之间的共享密钥。Compose 未设置时仅使用
-  `local-dev-only` 作为本机默认值，部署到共享环境前必须替换。
+`local-dev-only` 作为本机默认值。Compose 的所有端口只绑定 `127.0.0.1`；它是
+本机开发拓扑，不得原样部署到共享环境。共享环境必须替换密钥，并在前端之前增加
+真实的用户/会话认证，不能把前端反向代理注入的共享 key 当成终端用户认证。
+容器化前端自身启用 HTTP Basic Auth，账号由 `FRONTEND_USERNAME` 和
+`FRONTEND_PASSWORD` 配置；本机默认密码仅用于零配置演示，共享环境必须替换。
 
 仓库当前不包含任何真实 Apify token。`APIFY_API_TOKEN` 为空或仍是示例值时，
 严格检查显示 `skipped`；这不代表 Apify 已联通。
@@ -35,7 +39,7 @@ docker compose up --build
 | OpenSearch | `http://127.0.0.1:9200` | 品类知识库混合检索 |
 | MongoDB | `mongodb://127.0.0.1:27017/lector` | Amazon 搜索结果缓存 |
 
-OpenSearch 的安全插件仅在这个本地 Compose 配置中关闭。Query Tower 首次启动需要
+OpenSearch 的安全插件仅在这个仅绑定回环地址的本地 Compose 配置中关闭。Query Tower 首次启动需要
 下载 `BAAI/bge-m3`，健康检查会等模型加载完成。
 
 只启动基础依赖：

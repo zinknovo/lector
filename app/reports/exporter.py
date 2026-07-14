@@ -12,7 +12,7 @@ from reportlab.lib.enums import TA_LEFT
 from reportlab.lib.pagesizes import A4, landscape
 from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.pdfbase import pdfmetrics
-from reportlab.pdfbase.cidfonts import UnicodeCIDFont
+from reportlab.pdfbase.ttfonts import TTFont
 from reportlab.platypus import (
     Flowable,
     Paragraph,
@@ -26,6 +26,8 @@ from app.tools.shopping_summary import SelectionReport, ShoppingSummaryOutput
 
 _SAFE_BASENAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
 _FORMULA_PREFIXES = ("=", "+", "-", "@")
+_FONT_NAME = "NotoSansSC"
+_FONT_PATH = Path(__file__).with_name("assets") / "NotoSansSC-VF.ttf"
 _HEADERS = [
     "product_id",
     "title",
@@ -100,11 +102,11 @@ def _write_xlsx(summary: ShoppingSummaryOutput, target: Path) -> None:
 
 
 def _write_pdf(summary: ShoppingSummaryOutput, target: Path) -> None:
-    font_name = "STSong-Light"
+    font_name = _FONT_NAME
     try:
         pdfmetrics.getFont(font_name)
     except KeyError:
-        pdfmetrics.registerFont(UnicodeCIDFont(font_name))
+        pdfmetrics.registerFont(TTFont(font_name, _FONT_PATH))
     styles = getSampleStyleSheet()
     title_style = ParagraphStyle(
         "LectorTitle",

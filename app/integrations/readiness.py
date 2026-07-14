@@ -52,6 +52,11 @@ def _configured(value: str | None) -> bool:
     )
 
 
+def _native_timeout_seconds(cap: float = 3.0) -> float:
+    readiness_timeout = float(os.environ.get("READINESS_TIMEOUT_SECONDS", "30"))
+    return max(0.1, min(cap, readiness_timeout * 0.8))
+
+
 def _redact(detail: str, secrets: Sequence[str]) -> str:
     redacted = detail
     for secret in secrets:
@@ -72,7 +77,13 @@ async def _check_apify(api_token: str | None = None) -> str:
     token = api_token or os.environ.get("APIFY_API_TOKEN")
     if not _configured(token):
         raise CapabilitySkipped("APIFY_API_TOKEN is not configured")
-    source = ApifyAmazonDataSource(api_token=token)
+    timeout = float(os.environ.get("READINESS_TIMEOUT_SECONDS", "30"))
+    source = ApifyAmazonDataSource(
+        api_token=token,
+        request_timeout_seconds=max(1.0, timeout * 0.8),
+        max_retries=0,
+        use_cache=False,
+    )
     products = await source.search("wireless earbuds", max_results=1, limit=1)
     amazon = [item for item in products if item.platform == "amazon"]
     if not amazon:
@@ -88,26 +99,36 @@ async def _check_mongodb() -> str:
     def round_trip() -> str:
         from pymongo import MongoClient
 
-        client = MongoClient(url, serverSelectionTimeoutMS=3000)
-        client.admin.command("ping")
-        collection = client["lector"]["product_search_cache"]
-        cache = ProductSearchCache(collection=collection)
-        query = f"readiness-{uuid.uuid4().hex}"
-        product = Product(
-            product_id="readiness",
-            title="Readiness Probe",
-            category="health_check",
-            price=Decimal("1.00"),
-            platform="amazon",
-            url="https://example.invalid/readiness",
+        timeout_ms = int(_native_timeout_seconds() * 1000)
+        client = MongoClient(
+            url,
+            serverSelectionTimeoutMS=timeout_ms,
+            connectTimeoutMS=timeout_ms,
+            socketTimeoutMS=timeout_ms,
         )
-        cache.set("readiness", query, {}, [product])
-        cached = cache.get("readiness", query, {})
-        collection.delete_one({"_id": ProductSearchCache._key("readiness", query, {})})
-        if not cached or cached[0].product_id != "readiness":
-            raise RuntimeError("MongoDB cache round-trip failed")
-        client.close()
-        return "ping and cache round-trip"
+        try:
+            client.admin.command("ping")
+            collection = client["lector"]["product_search_cache"]
+            cache = ProductSearchCache(collection=collection)
+            query = f"readiness-{uuid.uuid4().hex}"
+            product = Product(
+                product_id="readiness",
+                title="Readiness Probe",
+                category="health_check",
+                price=Decimal("1.00"),
+                platform="amazon",
+                url="https://example.invalid/readiness",
+            )
+            cache.set("readiness", query, {}, [product])
+            cached = cache.get("readiness", query, {})
+            collection.delete_one(
+                {"_id": ProductSearchCache._key("readiness", query, {})}
+            )
+            if not cached or cached[0].product_id != "readiness":
+                raise RuntimeError("MongoDB cache round-trip failed")
+            return "ping and cache round-trip"
+        finally:
+            client.close()
 
     return await asyncio.to_thread(round_trip)
 
@@ -149,10 +170,13 @@ async def _check_opensearch() -> str:
             hosts=[{"host": host, "port": int(os.environ.get("OPENSEARCH_PORT", "9200"))}],
             http_auth=auth,
             use_ssl=False,
-            timeout=3,
+            timeout=_native_timeout_seconds(),
         )
-        health: dict[str, Any] = client.cluster.health()
-        return f"cluster status={health.get('status', 'unknown')}"
+        try:
+            health: dict[str, Any] = client.cluster.health()
+            return f"cluster status={health.get('status', 'unknown')}"
+        finally:
+            client.close()
 
     return await asyncio.to_thread(cluster_health)
 
@@ -186,16 +210,23 @@ async def run_readiness(
     *,
     checks: Mapping[str, AsyncCheck] | None = None,
     secrets: Sequence[str] = (),
+    timeout_seconds: float | None = None,
 ) -> ReadinessReport:
     available = dict(checks or _production_checks())
     unknown = selected - available.keys()
     if unknown:
         raise ValueError(f"unknown readiness checks: {', '.join(sorted(unknown))}")
     results: list[CheckResult] = []
+    deadline = timeout_seconds or float(
+        os.environ.get("READINESS_TIMEOUT_SECONDS", "30")
+    )
+    if deadline <= 0:
+        raise ValueError("readiness timeout must be positive")
     for name in sorted(selected):
         started = time.perf_counter()
         try:
-            detail = await available[name]()
+            async with asyncio.timeout(deadline):
+                detail = await available[name]()
             status = CheckStatus.PASS
         except CapabilitySkipped as exc:
             status = CheckStatus.SKIPPED

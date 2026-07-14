@@ -9,6 +9,8 @@ def test_direct_script_entrypoints_can_import_application() -> None:
     for script in (
         "scripts/smoke_external_services.py",
         "scripts/export_selection_report.py",
+        "scripts/setup_pipeline.py",
+        "scripts/build_category_kb.py",
     ):
         result = subprocess.run(
             [sys.executable, script, "--help"],
