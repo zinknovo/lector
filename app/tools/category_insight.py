@@ -1,22 +1,19 @@
 """品类洞察工具：查询品类的结构化常识。"""
 
-import os
 import re
 import time
-from typing import Any, Literal
+from typing import Literal
 
 from langchain_core.tools import tool
-from opensearchpy import OpenSearch
 from pydantic import BaseModel
 
 from app.api.monitor import monitor
 from app.recall.category_kb import CategoryCard
 from app.recall.category_norm import normalize_category
-from app.recall.opensearch_config import (
-    CATEGORY_KB_TEXT_ANALYZER,
-    opensearch_connection_settings,
+from app.recall.category_store import (
+    CategoryKnowledgeStore,
+    get_category_knowledge_store,
 )
-from app.recall.towers import tower_client
 
 
 class Bestseller(BaseModel):
@@ -53,53 +50,14 @@ class CategoryInsightOutput(BaseModel):
     confidence: float  # 整体置信度
 
 
-INDEX_NAME = os.environ.get("CATEGORY_KB_INDEX", "lector_category_kb")
-SEARCH_PIPELINE_NAME = os.environ.get(
-    "CATEGORY_KB_SEARCH_PIPELINE", "lector_hybrid_pipeline"
-)
-
-_kb_client = OpenSearch(**opensearch_connection_settings())
-
-
-async def _recall_cards(category: str, top_k: int) -> list[CategoryCard]:
-    """Hybrid 检索：KNN 向量召回 + BM25 全文匹配，引擎层加权融合。"""
-    emb = await tower_client.encode_query(category)
-
-    body: dict[str, Any] = {
-        "size": top_k,
-        "query": {
-            "hybrid": {
-                "queries": [
-                    # 子路 1: KNN 向量语义召回
-                    {"knn": {"content_vector": {"vector": emb, "k": top_k}}},
-                    # 子路 2: BM25 中文全文匹配（category 字段权重 x2）
-                    {
-                        "multi_match": {
-                            "query": category,
-                            "fields": ["category^2", "summary"],
-                            "analyzer": CATEGORY_KB_TEXT_ANALYZER,
-                        }
-                    },
-                ]
-            }
-        },
-        # 不要把高维向量原样返回，减少带宽
-        "_source": {"excludes": ["content_vector"]},
-    }
-
-    # search_pipeline 在 OpenSearch 端配：
-    # normalization=min_max, combination=arithmetic_mean, weights=[0.7, 0.3]
-    # 完整 DSL 参见讲义第 4-1 章 §6「OpenSearch Hybrid Query 最小配方」
-    resp = _kb_client.search(
-        index=INDEX_NAME,
-        body=body,
-        params={"search_pipeline": SEARCH_PIPELINE_NAME},
-    )
-
-    cards: list[CategoryCard] = []
-    for hit in resp["hits"]["hits"]:
-        cards.append(CategoryCard(**hit["_source"]))
-    return cards
+async def _recall_cards(
+    category: str,
+    top_k: int,
+    store: CategoryKnowledgeStore | None = None,
+) -> list[CategoryCard]:
+    """从品类知识存储中召回结构化卡片。"""
+    backend = store or get_category_knowledge_store()
+    return await backend.search(category, limit=top_k)
 
 
 def _split_by_type(cards: list[CategoryCard]) -> dict[str, list[CategoryCard]]:
@@ -214,33 +172,40 @@ async def category_insight(
     await monitor.report_tool_start("category_insight", {"category": category, "depth": depth})
     t0 = time.time()
 
-    category = normalize_category(category)
+    try:
+        category = normalize_category(category)
 
-    top_k = 8 if depth == "quick" else 15
-    cards = await _recall_cards(category, top_k)
-    grouped = _split_by_type(cards)
+        top_k = 8 if depth == "quick" else 15
+        cards = await _recall_cards(category, top_k)
+        grouped = _split_by_type(cards)
 
-    components = _extract_components(grouped["bestseller"])
-    bestsellers = _extract_bestsellers(grouped["bestseller"])
-    price_tiers = _extract_price_tiers(grouped["price_range"])
+        components = _extract_components(grouped["bestseller"])
+        bestsellers = _extract_bestsellers(grouped["bestseller"])
+        price_tiers = _extract_price_tiers(grouped["price_range"])
 
-    if depth == "deep":
-        attributes = _extract_attributes(grouped["attribute"])
-    else:
-        attributes = []
+        if depth == "deep":
+            attributes = _extract_attributes(grouped["attribute"])
+        else:
+            attributes = []
 
-    confidence = (
-        sum(c.confidence for c in cards) / len(cards) if cards else 0.0
-    )
+        confidence = (
+            sum(c.confidence for c in cards) / len(cards) if cards else 0.0
+        )
 
-    await monitor.report_tool_end(
-        "category_insight", int((time.time() - t0) * 1000)
-    )
-    return CategoryInsightOutput(
-        category=category,
-        components=components,
-        bestsellers=bestsellers,
-        attributes=attributes,
-        price_tiers=price_tiers,
-        confidence=round(confidence, 2),
-    )
+        await monitor.report_tool_end(
+            "category_insight", int((time.time() - t0) * 1000)
+        )
+        return CategoryInsightOutput(
+            category=category,
+            components=components,
+            bestsellers=bestsellers,
+            attributes=attributes,
+            price_tiers=price_tiers,
+            confidence=round(confidence, 2),
+        )
+    except Exception as exc:
+        await monitor.report_error(
+            type(exc).__name__,
+            f"category_insight failed: {exc}",
+        )
+        raise
