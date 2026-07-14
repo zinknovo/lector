@@ -1,0 +1,12 @@
+{
+  "venvPath": ".",
+  "venv": ".venv",
+  "extraPaths": ["."],
+  "include": ["app"],
+  "typeCheckingMode": "standard",
+  "reportExplicitAny": false,
+  "reportAny": false,
+  "reportUnknownMemberType": false,
+  "reportUnknownVariableType": false,
+  "reportUnknownArgumentType": false
+}
