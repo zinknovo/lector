@@ -33,7 +33,7 @@ ReAct Agent
 
 - 商品身份：product_id、title、platform。
 - 市场指标：rating、review_count、sales。
-- 财务指标：selling_price_cny、landed_cost_cny、total_cost_cny、net_profit_cny、profit_margin、roi。
+- 财务与物流指标：selling_price_cny、landed_cost_cny、shipping_cost_cny、eta_days、total_cost_cny、net_profit_cny、profit_margin、roi。
 - 供应商指标：supplier_risk_score、supplier_risk_level。
 - 评分：market_score、profit_score、logistics_score、supplier_score、overall_score、confidence。
 - 结论：recommendation、reasons、risks、missing_data。
