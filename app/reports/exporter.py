@@ -13,9 +13,16 @@ from reportlab.lib.pagesizes import A4, landscape
 from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.cidfonts import UnicodeCIDFont
-from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
+from reportlab.platypus import (
+    Flowable,
+    Paragraph,
+    SimpleDocTemplate,
+    Spacer,
+    Table,
+    TableStyle,
+)
 
-from app.tools.shopping_summary import ShoppingSummaryOutput
+from app.tools.shopping_summary import SelectionReport, ShoppingSummaryOutput
 
 _SAFE_BASENAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
 _FORMULA_PREFIXES = ("=", "+", "-", "@")
@@ -50,8 +57,7 @@ def _safe_cell(value: object) -> object:
     return value
 
 
-def _row(report: object) -> list[object]:
-    item = report
+def _row(item: SelectionReport) -> list[object]:
     return [
         _safe_cell(item.product_id),
         _safe_cell(item.title),
@@ -75,6 +81,7 @@ def _row(report: object) -> list[object]:
 def _write_xlsx(summary: ShoppingSummaryOutput, target: Path) -> None:
     workbook = Workbook()
     sheet = workbook.active
+    assert sheet is not None
     sheet.title = "Selection Report"
     sheet.append(_HEADERS)
     for cell in sheet[1]:
@@ -116,7 +123,7 @@ def _write_pdf(summary: ShoppingSummaryOutput, target: Path) -> None:
     document = SimpleDocTemplate(
         str(target), pagesize=landscape(A4), leftMargin=24, rightMargin=24
     )
-    story: list[object] = [
+    story: list[Flowable] = [
         Paragraph("Lector 选品报告", title_style),
         Spacer(1, 8),
         Paragraph(escape(summary.final_text), body_style),

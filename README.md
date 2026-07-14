@@ -83,6 +83,26 @@ pnpm --dir frontend install
 pnpm --dir frontend dev
 ```
 
+开发环境若通过 Java 网关访问，先复制 `frontend/.env.example` 为
+`frontend/.env.local`。Vite 只在开发代理进程中读取 `LECTOR_API_KEY`，不会把它
+打进浏览器 bundle。
+
+## 本地完整栈
+
+```bash
+cp .env.example .env
+# 至少设置 LLM_API_KEY；真实 Amazon 搜索还需设置 APIFY_API_TOKEN，并将 USE_MOCK=false
+docker compose up --build
+```
+
+服务入口：前端 `http://127.0.0.1:5173`，Java 网关 `http://127.0.0.1:8080`，
+内部 Python Agent `http://127.0.0.1:8000`。MongoDB、OpenSearch 和 BGE-M3
+Query Tower 也由 Compose 启动。首次启动 Query Tower 会下载模型，耗时和磁盘占用
+取决于 Hugging Face 缓存状态。
+
+完整部署、严格外部检查和报告导出命令见
+[`docs/production-readiness.md`](docs/production-readiness.md)。
+
 ## 验证
 
 ```bash
@@ -90,4 +110,6 @@ uv run pytest
 uv run basedpyright app tests scripts
 pnpm --dir frontend test -- --run
 pnpm --dir frontend build
+mvn -f lector-api/pom.xml test
+docker compose config --quiet
 ```
