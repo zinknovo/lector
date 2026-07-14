@@ -5,9 +5,11 @@ from app.integrations.readiness import (
     CheckStatus,
     _check_apify,
     _check_mongodb,
+    _check_web_search,
     _production_checks,
     run_readiness,
 )
+from app.tools.web_search import SearchResult, WebSearchOutput
 
 
 def test_readiness_reports_pass_fail_skip_and_redacts_secrets() -> None:
@@ -147,3 +149,28 @@ def test_mongodb_check_pings_and_round_trips_cache(monkeypatch) -> None:
 
     assert asyncio.run(_check_mongodb()) == "ping and cache round-trip"
     assert Client.closed is True
+
+
+def test_web_search_readiness_accepts_deepseek_auto_backend(monkeypatch) -> None:
+    from app.tools.web_search import web_search as tool
+
+    async def fake_ainvoke(_self, _args):
+        return WebSearchOutput(
+            query="Amazon ecommerce trend today",
+            provider="deepseek_anthropic",
+            status="ok",
+            results=[
+                SearchResult(
+                    title="Market report",
+                    url="https://example.com/report",
+                    content="Evidence",
+                )
+            ],
+        )
+
+    monkeypatch.setenv("LLM_WEB_SEARCH_BACKEND", "auto")
+    monkeypatch.setenv("LLM_BASE_URL", "https://api.deepseek.com")
+    monkeypatch.setenv("LLM_API_KEY", "test-key")
+    monkeypatch.setattr(type(tool), "ainvoke", fake_ainvoke)
+
+    assert asyncio.run(_check_web_search()) == "1 cited result"

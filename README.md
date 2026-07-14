@@ -32,7 +32,7 @@ MONGODB_URL=
 LLM_WEB_SEARCH_BACKEND=auto
 ```
 
-`web_search` 通过统一接口调用当前模型端的内置搜索，不需要独立搜索供应商或额外密钥。`auto` 当前会为 OpenAI 官方端点绑定 Responses API 的 `web_search` 工具；DeepSeek API 尚未提供可绑定的服务端内置搜索，因此会返回明确的 `unavailable` 状态。趋势研究会降级为数据不足，非同币种汇率不会使用模型猜测。`price_compare`、`exchange_rate` 和 `profit_calculator` 共用动态汇率结果及进程内缓存。
+`web_search` 通过统一接口调用当前模型端的内置搜索，不需要独立搜索供应商或额外密钥。`auto` 会为 OpenAI 官方端点绑定 Responses API 的 `web_search` 工具；DeepSeek 官方端点则复用同一个 Key，仅将搜索请求发送到 DeepSeek 的 Anthropic 兼容 Messages API，普通推理仍走现有 Chat Completions 接口。趋势研究、`price_compare`、`exchange_rate` 和 `profit_calculator` 共用搜索证据及进程内汇率缓存。
 
 启用 OpenAI 内置搜索时，沿用现有 LLM 配置：
 

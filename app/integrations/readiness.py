@@ -137,7 +137,10 @@ async def _check_web_search() -> str:
 
     backend = os.environ.get("LLM_WEB_SEARCH_BACKEND", "auto").lower()
     base_url = os.environ.get("LLM_BASE_URL", "").lower()
-    if backend == "none" or (backend == "auto" and "api.openai.com" not in base_url):
+    supported_auto_endpoint = any(
+        host in base_url for host in ("api.openai.com", "api.deepseek.com")
+    )
+    if backend == "none" or (backend == "auto" and not supported_auto_endpoint):
         raise CapabilitySkipped("active LLM endpoint has no configured built-in search")
     result = await web_search.ainvoke({"query": "Amazon ecommerce trend today", "max_results": 1})
     if result.status != "ok" or not result.results:

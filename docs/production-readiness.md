@@ -12,8 +12,9 @@ cp .env.example .env
 - `USE_MOCK=true` 只验证本地工具链；真实 Amazon 验收需设置
   `APIFY_API_TOKEN` 并改为 `USE_MOCK=false`。
 - `LLM_WEB_SEARCH_BACKEND=auto` 使用模型服务端内置搜索接口，不引入 Tavily 等
-  独立 Provider。当前后端不支持内置搜索时，检查会明确返回 `skipped` 或 `fail`，
-  不会伪造结果。
+  独立 Provider。OpenAI 走 Responses API，DeepSeek 复用现有 Key 并仅对搜索走
+  Anthropic 兼容 Messages API；普通推理接口不变。当前后端不支持内置搜索时，
+  检查会明确返回 `skipped` 或 `fail`，不会伪造结果。
 - `LECTOR_API_KEY` 是 Java 网关与反向代理之间的共享密钥。Compose 未设置时仅使用
 `local-dev-only` 作为本机默认值。Compose 的所有端口只绑定 `127.0.0.1`；它是
 本机开发拓扑，不得原样部署到共享环境。共享环境必须替换密钥，并在前端之前增加

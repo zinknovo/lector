@@ -264,16 +264,18 @@ def get_web_search_backend() -> BuiltInWebSearchBackend:
     backend = os.environ.get("LLM_WEB_SEARCH_BACKEND", "auto").strip().lower()
     base_url = os.environ.get("LLM_BASE_URL", "https://api.deepseek.com")
     if backend == "auto":
-        backend = (
-            "openai_responses"
-            if "api.openai.com" in base_url.lower()
-            else "none"
-        )
+        lowered_base_url = base_url.lower()
+        if "api.openai.com" in lowered_base_url:
+            backend = "openai_responses"
+        elif "api.deepseek.com" in lowered_base_url:
+            backend = "deepseek_anthropic"
+        else:
+            backend = "none"
     if backend == "none":
         return UnavailableWebSearchBackend(
             "The active model endpoint has no configured built-in web search capability"
         )
-    if backend != "openai_responses":
+    if backend not in {"deepseek_anthropic", "openai_responses"}:
         return UnavailableWebSearchBackend(
             f"Unknown built-in web search backend: {backend}"
         )
@@ -281,6 +283,15 @@ def get_web_search_backend() -> BuiltInWebSearchBackend:
     if not api_key:
         return UnavailableWebSearchBackend(
             "LLM_API_KEY is required for built-in web search"
+        )
+    if backend == "deepseek_anthropic":
+        return DeepSeekAnthropicWebSearchBackend(
+            api_key=api_key,
+            model=os.environ.get("LLM_MODEL_NAME", "deepseek-v4-pro"),
+            base_url=os.environ.get(
+                "DEEPSEEK_ANTHROPIC_BASE_URL",
+                "https://api.deepseek.com/anthropic",
+            ),
         )
     client = AsyncOpenAI(api_key=api_key, base_url=base_url)
     return OpenAIResponsesWebSearchBackend(

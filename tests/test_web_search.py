@@ -208,13 +208,31 @@ def test_deepseek_backend_redacts_http_failure() -> None:
     assert "test-key" not in result.error
 
 
-def test_auto_backend_marks_deepseek_search_unavailable(monkeypatch) -> None:
+def test_auto_backend_selects_deepseek_anthropic(monkeypatch) -> None:
     monkeypatch.setenv("LLM_WEB_SEARCH_BACKEND", "auto")
     monkeypatch.setenv("LLM_BASE_URL", "https://api.deepseek.com")
-    assert isinstance(get_web_search_backend(), UnavailableWebSearchBackend)
-    result = asyncio.run(web_search.ainvoke({"query": "test"}))
-    assert result.status == "unavailable"
-    assert "built-in web search" in (result.error or "")
+    monkeypatch.setenv("LLM_API_KEY", "test-key")
+    monkeypatch.setenv("LLM_MODEL_NAME", "deepseek-v4-pro")
+
+    backend = get_web_search_backend()
+
+    assert isinstance(backend, DeepSeekAnthropicWebSearchBackend)
+
+
+def test_explicit_deepseek_backend_honors_anthropic_base_url(monkeypatch) -> None:
+    monkeypatch.setenv("LLM_WEB_SEARCH_BACKEND", "deepseek_anthropic")
+    monkeypatch.setenv("LLM_BASE_URL", "https://llm-proxy.test/v1")
+    monkeypatch.setenv("LLM_API_KEY", "test-key")
+    monkeypatch.setenv("LLM_MODEL_NAME", "deepseek-v4-pro")
+    monkeypatch.setenv(
+        "DEEPSEEK_ANTHROPIC_BASE_URL",
+        "https://search-proxy.test/anthropic/",
+    )
+
+    backend = get_web_search_backend()
+
+    assert isinstance(backend, DeepSeekAnthropicWebSearchBackend)
+    assert backend._endpoint == "https://search-proxy.test/anthropic/v1/messages"
 
 
 def test_auto_backend_selects_openai_responses(monkeypatch) -> None:
