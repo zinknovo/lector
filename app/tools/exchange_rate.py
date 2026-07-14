@@ -10,7 +10,7 @@ from pydantic import BaseModel, Field
 
 from app.agent.llm import get_llm
 from app.api.monitor import monitor
-from app.tools.web_search import web_search
+from app.tools.web_search import WebSearchOutput, web_search
 
 
 class ExchangeRateOutput(BaseModel):
@@ -69,11 +69,18 @@ async def exchange_rate(
                 source="memory_cache",
             )
         else:
-            evidence = str(
-                await web_search.ainvoke(
-                    {"query": f"1 {source_currency} to {target_currency} exchange rate today"}
-                )
+            search_result: WebSearchOutput = await web_search.ainvoke(
+                {"query": f"1 {source_currency} to {target_currency} exchange rate today"}
             )
+            evidence = (
+                search_result.as_evidence(max_chars=4000)
+                if search_result.status == "ok"
+                else ""
+            )
+            if not evidence:
+                raise RuntimeError(
+                    f"无法获取 {source_currency}/{target_currency} 实时汇率"
+                )
             try:
                 response = await get_llm().ainvoke(
                     [

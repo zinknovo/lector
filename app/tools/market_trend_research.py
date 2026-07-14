@@ -8,7 +8,7 @@ from pydantic import BaseModel, Field
 
 from app.agent.llm import get_llm
 from app.api.monitor import monitor
-from app.tools.web_search import web_search
+from app.tools.web_search import WebSearchOutput, web_search
 
 
 class MarketTrendOutput(BaseModel):
@@ -40,11 +40,12 @@ async def market_trend_research(category: str) -> MarketTrendOutput:
     """Research demand and opportunity gaps for an ecommerce category."""
     await monitor.report_tool_start("market_trend_research", {"category": category})
     started_at = time.time()
-    evidence = str(
-        await web_search.ainvoke({"query": f"{category} market trend demand 2026"})
+    search_result: WebSearchOutput = await web_search.ainvoke(
+        {"query": f"{category} market trend demand 2026"}
     )
+    evidence = search_result.as_evidence() if search_result.status == "ok" else ""
     result = _fallback(category, evidence)
-    if "占位结果" not in evidence:
+    if evidence:
         try:
             response = await get_llm().ainvoke(
                 [
