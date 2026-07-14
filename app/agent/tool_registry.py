@@ -13,6 +13,7 @@ from app.tools.product_scraper import product_scraper
 from app.tools.profit_calculator import profit_calculator
 from app.tools.shipping_calc import shipping_calc
 from app.tools.shopping_summary import shopping_summary
+from app.tools.selection_decision import selection_decision
 from app.tools.supplier_evaluator import supplier_evaluator
 from app.tools.web_search import web_search
 
@@ -31,6 +32,7 @@ FULL_TOOL_SET = [
     shipping_calc,
     profit_calculator,
     supplier_evaluator,
+    selection_decision,
     shopping_summary,
     dispatch_tool,
 ]

@@ -33,6 +33,7 @@ def test_full_tool_set_registers_all_implemented_tools() -> None:
         "shipping_calc",
         "profit_calculator",
         "supplier_evaluator",
+        "selection_decision",
         "shopping_summary",
         "dispatch_tool",
     }
