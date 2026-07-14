@@ -1,0 +1,21 @@
+server:
+  port: ${SERVER_PORT:8080}
+
+lector:
+  agent:
+    base-url: ${LECTOR_AGENT_BASE_URL:http://127.0.0.1:8000}
+    ws-base-url: ${LECTOR_AGENT_WS_BASE_URL:ws://127.0.0.1:8000}
+  security:
+    api-key: ${LECTOR_API_KEY}
+    rate-capacity: ${LECTOR_RATE_CAPACITY:60}
+    rate-refill-per-minute: ${LECTOR_RATE_REFILL_PER_MINUTE:60}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus,metrics
+  endpoint:
+    health:
+      probes:
+        enabled: true

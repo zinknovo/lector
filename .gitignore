@@ -6,4 +6,5 @@ output/
 uploaded/
 frontend/node_modules/
 frontend/dist/
+lector-api/target/
 *.tsbuildinfo
