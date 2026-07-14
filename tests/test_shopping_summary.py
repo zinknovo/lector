@@ -1,19 +1,39 @@
 import asyncio
 import json
-import os
-
-os.environ.setdefault("OPENSEARCH_HOST", "localhost")
-os.environ.setdefault("OPENSEARCH_USER", "test")
-os.environ.setdefault("OPENSEARCH_PASS", "test")
-os.environ.setdefault("TOWER_USER_ENDPOINT", "http://localhost/user")
-os.environ.setdefault("TOWER_QUERY_ENDPOINT", "http://localhost/query")
 
 from langchain_core.messages import AIMessage
 
-from app.tools.item_picker import PickedItem
+from app.tools.selection_decision import Recommendation, SelectionDecision
+from app.tools.supplier_evaluator import RiskLevel
 
 
-def test_shopping_summary_calls_llm_and_returns_structured_output(monkeypatch) -> None:
+def _decision() -> SelectionDecision:
+    return SelectionDecision(
+        product_id="A1",
+        title="Strong Product",
+        platform="amazon",
+        selling_price_cny=500,
+        landed_cost_cny=180,
+        total_cost_cny=250,
+        net_profit_cny=250,
+        profit_margin=0.5,
+        roi=1.0,
+        supplier_risk_score=0.1,
+        supplier_risk_level=RiskLevel.LOW,
+        market_score=0.9,
+        profit_score=1.0,
+        logistics_score=0.8,
+        supplier_score=0.9,
+        overall_score=0.91,
+        confidence=1.0,
+        recommendation=Recommendation.RECOMMEND,
+        reasons=["利润能力达到目标"],
+        risks=[],
+        missing_data=[],
+    )
+
+
+def test_shopping_summary_preserves_decision_evidence(monkeypatch) -> None:
     from app.tools import shopping_summary as module
 
     class FakeLLM:
@@ -21,38 +41,42 @@ def test_shopping_summary_calls_llm_and_returns_structured_output(monkeypatch) -
 
         async def ainvoke(self, messages):
             self.messages = messages
-            return AIMessage(content="最终推荐")
+            return AIMessage(content="选品报告")
 
     fake = FakeLLM()
     monkeypatch.setattr(module, "get_llm", lambda: fake)
-
-    pick = PickedItem(
-        item_id="S1",
-        platform="shopee",
-        landed_cny=199,
-        score=1.0,
-        reasons=["价格合适"],
-        flags=[],
-    )
-
-    async def run():
-        return await module.shopping_summary.ainvoke(
+    decision = _decision()
+    result = asyncio.run(
+        module.shopping_summary.ainvoke(
             {
-                "picks": [pick.model_dump()],
-                "user_query": "找一个旅行背包",
-                "new_preferences": None,
+                "decisions": [decision.model_dump(mode="json")],
+                "user_query": "选择耳机 SKU",
             }
         )
-
-    result = asyncio.run(run())
-
-    assert result.final_text == "最终推荐"
-    assert result.picks == [pick]
-    assert result.learned_preferences == []
-    assert len(result.report) == 1
-    assert result.report[0].product_id == "S1"
-    assert result.report[0].risks == []
-    assert fake.messages[0][0] == "system"
+    )
+    assert result.final_text == "选品报告"
+    assert result.decisions == [decision]
+    assert result.report[0].net_profit_cny == 250
+    assert result.report[0].supplier_risk_level == RiskLevel.LOW
+    assert result.report[0].confidence == 1.0
     payload = json.loads(fake.messages[1][1])
-    assert payload["user_query"] == "找一个旅行背包"
-    assert payload["picks"] == [pick.model_dump()]
+    assert payload["decisions"][0]["profit_margin"] == 0.5
+    assert payload["decisions"][0]["missing_data"] == []
+
+
+def test_shopping_summary_handles_empty_decisions_without_llm(monkeypatch) -> None:
+    from app.tools import shopping_summary as module
+
+    monkeypatch.setattr(
+        module,
+        "get_llm",
+        lambda: (_ for _ in ()).throw(AssertionError("LLM must not be called")),
+    )
+    result = asyncio.run(
+        module.shopping_summary.ainvoke(
+            {"decisions": [], "user_query": "选择耳机 SKU"}
+        )
+    )
+    assert result.decisions == []
+    assert result.report == []
+    assert "没有可报告" in result.final_text
