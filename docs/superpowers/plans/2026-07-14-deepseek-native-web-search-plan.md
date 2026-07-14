@@ -117,7 +117,7 @@ class DeepSeekAnthropicWebSearchBackend:
         # Deduplicate URLs, apply max_results, and return provider=deepseek_anthropic.
 ```
 
-Use an injected client without closing it. When no client is injected, create an `httpx.AsyncClient(timeout=30.0)` inside `search()` and close it in `finally`. Call `raise_for_status()`. Map `HTTPStatusError` to `DeepSeek web search failed: HTTP <status>` and all other exceptions to `DeepSeek web search failed: <ExceptionType>`.
+Use an injected client without closing it. When no client is injected, create an `httpx.AsyncClient` with a 120-second default inside `search()` and close it in `finally`. The factory reads `DEEPSEEK_WEB_SEARCH_TIMEOUT_SECONDS`; live verification found that a valid DeepSeek search can take about 45 seconds. Call `raise_for_status()`. Map `HTTPStatusError` to `DeepSeek web search failed: HTTP <status>` and all other exceptions to `DeepSeek web search failed: <ExceptionType>`.
 
 Only accept dictionary content blocks. Ignore error blocks, empty URLs, `encrypted_content`, and malformed entries. If no URL remains, return unavailable with `DeepSeek web search returned no URL results`.
 

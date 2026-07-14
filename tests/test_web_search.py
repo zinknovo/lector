@@ -208,6 +208,51 @@ def test_deepseek_backend_redacts_http_failure() -> None:
     assert "test-key" not in result.error
 
 
+def test_deepseek_backend_applies_timeout_to_owned_client(monkeypatch) -> None:
+    captured: dict[str, object] = {}
+
+    class FakeOwnedClient:
+        def __init__(self, *, timeout: float) -> None:
+            captured["timeout"] = timeout
+
+        async def post(self, url: str, **_kwargs) -> httpx.Response:
+            return httpx.Response(
+                200,
+                request=httpx.Request("POST", url),
+                json={
+                    "stop_reason": "end_turn",
+                    "content": [
+                        {
+                            "type": "web_search_tool_result",
+                            "content": [
+                                {
+                                    "type": "web_search_result",
+                                    "title": "Result",
+                                    "url": "https://result.test",
+                                }
+                            ],
+                        },
+                        {"type": "text", "text": "Evidence"},
+                    ],
+                },
+            )
+
+        async def aclose(self) -> None:
+            captured["closed"] = True
+
+    monkeypatch.setattr(httpx, "AsyncClient", FakeOwnedClient)
+    backend = DeepSeekAnthropicWebSearchBackend(
+        model="deepseek-v4-pro",
+        api_key="test-key",
+        timeout_seconds=90.0,
+    )
+
+    result = asyncio.run(backend.search("slow search", max_results=1))
+
+    assert result.status == "ok"
+    assert captured == {"timeout": 90.0, "closed": True}
+
+
 def test_auto_backend_selects_deepseek_anthropic(monkeypatch) -> None:
     monkeypatch.setenv("LLM_WEB_SEARCH_BACKEND", "auto")
     monkeypatch.setenv("LLM_BASE_URL", "https://api.deepseek.com")

@@ -62,11 +62,13 @@ class DeepSeekAnthropicWebSearchBackend:
         api_key: str,
         base_url: str = "https://api.deepseek.com/anthropic",
         client: httpx.AsyncClient | None = None,
+        timeout_seconds: float = 120.0,
     ) -> None:
         self._model = model
         self._api_key = api_key
         self._endpoint = f"{base_url.rstrip('/')}/v1/messages"
         self._client = client
+        self._timeout_seconds = max(1.0, timeout_seconds)
 
     @staticmethod
     def _unavailable(query: str, error: str) -> WebSearchOutput:
@@ -138,7 +140,7 @@ class DeepSeekAnthropicWebSearchBackend:
         )
 
     async def search(self, query: str, *, max_results: int) -> WebSearchOutput:
-        client = self._client or httpx.AsyncClient(timeout=30.0)
+        client = self._client or httpx.AsyncClient(timeout=self._timeout_seconds)
         owns_client = self._client is None
         messages: list[dict[str, Any]] = [
             {"role": "user", "content": query}
@@ -291,6 +293,9 @@ def get_web_search_backend() -> BuiltInWebSearchBackend:
             base_url=os.environ.get(
                 "DEEPSEEK_ANTHROPIC_BASE_URL",
                 "https://api.deepseek.com/anthropic",
+            ),
+            timeout_seconds=float(
+                os.environ.get("DEEPSEEK_WEB_SEARCH_TIMEOUT_SECONDS", "120")
             ),
         )
     client = AsyncOpenAI(api_key=api_key, base_url=base_url)
