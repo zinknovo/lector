@@ -11,7 +11,7 @@ os.environ.setdefault("TOWER_QUERY_ENDPOINT", "http://localhost/query")
 
 from app.tools.category_insight import INDEX_NAME as QUERY_INDEX_NAME
 from app.tools.category_insight import SEARCH_PIPELINE_NAME
-from scripts.build_category_kb import VECTOR_DIM, build_category_kb
+from scripts.build_category_kb import INDEX_MAPPING, VECTOR_DIM, build_category_kb
 from scripts.build_category_kb import INDEX_NAME as BUILD_INDEX_NAME
 from scripts.setup_pipeline import PIPELINE_NAME
 
@@ -72,3 +72,10 @@ def test_builder_validates_embeds_and_indexes_cards(tmp_path: Path) -> None:
 def test_builder_and_query_use_the_same_lector_resources() -> None:
     assert BUILD_INDEX_NAME == QUERY_INDEX_NAME == "lector_category_kb"
     assert PIPELINE_NAME == SEARCH_PIPELINE_NAME == "lector_hybrid_pipeline"
+
+
+def test_index_mapping_only_uses_built_in_text_analyzer() -> None:
+    properties = INDEX_MAPPING["mappings"]["properties"]
+    assert properties["category"]["analyzer"] == "standard"
+    assert properties["summary"]["analyzer"] == "standard"
+    assert properties["raw_evidence"]["analyzer"] == "standard"

@@ -17,7 +17,10 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 from app.recall.category_kb import CategoryCard
-from app.recall.opensearch_config import opensearch_connection_settings
+from app.recall.opensearch_config import (
+    CATEGORY_KB_TEXT_ANALYZER,
+    opensearch_connection_settings,
+)
 from scripts.etl.admit import admit
 
 load_dotenv(ROOT / ".env")
@@ -31,10 +34,13 @@ INDEX_MAPPING = {
     "mappings": {
         "properties": {
             "card_id": {"type": "keyword"},
-            "category": {"type": "text", "analyzer": "ik_max_word"},
+            "category": {"type": "text", "analyzer": CATEGORY_KB_TEXT_ANALYZER},
             "card_type": {"type": "keyword"},
-            "summary": {"type": "text", "analyzer": "ik_max_word"},
-            "raw_evidence": {"type": "text", "analyzer": "ik_max_word"},
+            "summary": {"type": "text", "analyzer": CATEGORY_KB_TEXT_ANALYZER},
+            "raw_evidence": {
+                "type": "text",
+                "analyzer": CATEGORY_KB_TEXT_ANALYZER,
+            },
             "last_updated": {"type": "date"},
             "confidence": {"type": "float"},
             "content_vector": {

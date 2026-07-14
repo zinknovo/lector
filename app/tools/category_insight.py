@@ -12,6 +12,10 @@ from pydantic import BaseModel
 from app.api.monitor import monitor
 from app.recall.category_kb import CategoryCard
 from app.recall.category_norm import normalize_category
+from app.recall.opensearch_config import (
+    CATEGORY_KB_TEXT_ANALYZER,
+    opensearch_connection_settings,
+)
 from app.recall.towers import tower_client
 
 
@@ -54,11 +58,7 @@ SEARCH_PIPELINE_NAME = os.environ.get(
     "CATEGORY_KB_SEARCH_PIPELINE", "lector_hybrid_pipeline"
 )
 
-_kb_client = OpenSearch(
-    hosts=[{"host": os.environ["OPENSEARCH_HOST"], "port": 9200}],
-    http_auth=(os.environ["OPENSEARCH_USER"], os.environ["OPENSEARCH_PASS"]),
-    use_ssl=False,
-)
+_kb_client = OpenSearch(**opensearch_connection_settings())
 
 
 async def _recall_cards(category: str, top_k: int) -> list[CategoryCard]:
@@ -77,7 +77,7 @@ async def _recall_cards(category: str, top_k: int) -> list[CategoryCard]:
                         "multi_match": {
                             "query": category,
                             "fields": ["category^2", "summary"],
-                            "analyzer": "ik_max_word",
+                            "analyzer": CATEGORY_KB_TEXT_ANALYZER,
                         }
                     },
                 ]

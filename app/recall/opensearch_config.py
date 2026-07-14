@@ -4,6 +4,8 @@ import os
 from collections.abc import Mapping
 from typing import Any
 
+CATEGORY_KB_TEXT_ANALYZER = "standard"
+
 
 def opensearch_connection_settings(
     environ: Mapping[str, str] | None = None,

@@ -2,10 +2,10 @@ name: lector
 
 services:
   mongodb:
-    image: mongo:8.0.14
+    image: public.ecr.aws/docker/library/mongo:8.0.14
     restart: unless-stopped
     ports:
-      - "127.0.0.1:27017:27017"
+      - "127.0.0.1:${MONGODB_HOST_PORT:-27017}:27017"
     volumes:
       - mongodb-data:/data/db
     healthcheck:
@@ -15,11 +15,12 @@ services:
       retries: 10
 
   opensearch:
-    image: opensearchproject/opensearch:3.6.0
+    image: public.ecr.aws/opensearchproject/opensearch:3.6.0
     restart: unless-stopped
     environment:
       discovery.type: single-node
-      plugins.security.disabled: "true"
+      DISABLE_INSTALL_DEMO_CONFIG: "true"
+      DISABLE_SECURITY_PLUGIN: "true"
       OPENSEARCH_JAVA_OPTS: "-Xms512m -Xmx512m"
     ports:
       - "127.0.0.1:9200:9200"

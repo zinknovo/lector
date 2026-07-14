@@ -30,6 +30,12 @@ cp .env.example .env
 docker compose up --build
 ```
 
+基础镜像使用 AWS Public ECR 中的 Docker Official Images 和 OpenSearch 官方镜像，
+避免本机网络无法访问 Docker Hub 时阻塞构建。ECR 匿名拉取有频率限制，首次构建若
+出现 `Rate exceeded`，应串行重试，已下载的 layer 会继续复用。
+Query Tower 从 PyTorch 官方 CPU wheel 源安装固定版本，避免 Linux ARM 环境误装
+CUDA runtime。
+
 | 服务 | 地址 | 用途 |
 | --- | --- | --- |
 | Frontend | `http://127.0.0.1:5173` | Nginx 静态站点及 API/WS 反向代理 |
@@ -38,6 +44,10 @@ docker compose up --build
 | Query Tower | `http://127.0.0.1:8001` | BGE-M3 1024 维归一化向量 |
 | OpenSearch | `http://127.0.0.1:9200` | 品类知识库混合检索 |
 | MongoDB | `mongodb://127.0.0.1:27017/lector` | Amazon 搜索结果缓存 |
+
+本机已有 MongoDB 时，可在 `.env` 设置 `MONGODB_HOST_PORT=27018`；容器之间的地址和
+端口不受影响。此时从宿主机执行 MongoDB smoke 或使用缓存，还要把 `MONGODB_URL`
+设置为 `mongodb://127.0.0.1:27018/lector`。
 
 OpenSearch 的安全插件仅在这个仅绑定回环地址的本地 Compose 配置中关闭。Query Tower 首次启动需要
 下载 `BAAI/bge-m3`，健康检查会等模型加载完成。
