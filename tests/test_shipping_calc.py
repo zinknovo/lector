@@ -25,3 +25,26 @@ def test_shipping_calc_forwards_selection_metrics() -> None:
     )
     item = result.items[0]
     assert (item.rating, item.review_count, item.sales) == (4.8, 900, 2000)
+
+
+def test_shipping_calc_uses_forwarded_product_weight() -> None:
+    result: ShippingCalcOutput = asyncio.run(
+        shipping_calc.ainvoke(
+            {
+                "points": [
+                    {
+                        "item_id": "A1",
+                        "platform": "amazon",
+                        "title": "Light item",
+                        "price_local": 10,
+                        "currency_local": "CNY",
+                        "price_cny": 70,
+                        "weight_kg": 0.2,
+                    }
+                ]
+            }
+        )
+    )
+
+    assert result.items[0].weight_kg == 0.2
+    assert result.items[0].shipping_cny == 85

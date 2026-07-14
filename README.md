@@ -43,6 +43,17 @@ LLM_API_KEY=
 LLM_WEB_SEARCH_BACKEND=auto
 ```
 
+## 品类知识库
+
+`category_insight` 使用 OpenSearch 的 BM25 + KNN 混合检索。准备好 `data/category_cards.jsonl` 和 1024 维 Query Tower 后执行：
+
+```bash
+uv run python scripts/setup_pipeline.py
+uv run python scripts/build_category_kb.py
+```
+
+构建脚本会逐行校验 `CategoryCard`、过滤低置信度数据、生成向量并写入 `lector_category_kb`。索引和搜索 pipeline 名称可通过 `CATEGORY_KB_INDEX`、`CATEGORY_KB_SEARCH_PIPELINE` 覆盖。
+
 ## 三阶段 Demo
 
 ```bash
@@ -76,6 +87,7 @@ pnpm --dir frontend dev
 
 ```bash
 uv run pytest
+uv run basedpyright app tests scripts
 pnpm --dir frontend test -- --run
 pnpm --dir frontend build
 ```

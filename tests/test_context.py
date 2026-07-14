@@ -30,7 +30,7 @@ def test_async_tasks_keep_separate_contexts() -> None:
         return get_thread_id(), get_session_dir()
 
     async def run_workers() -> list[tuple[str | None, Path | None]]:
-        return await asyncio.gather(worker("thread-a"), worker("thread-b"))
+        return list(await asyncio.gather(worker("thread-a"), worker("thread-b")))
 
     assert asyncio.run(run_workers()) == [
         ("thread-a", Path("/tmp/thread-a")),

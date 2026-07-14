@@ -49,7 +49,10 @@ class CategoryInsightOutput(BaseModel):
     confidence: float  # 整体置信度
 
 
-INDEX_NAME = "globex_category_kb"
+INDEX_NAME = os.environ.get("CATEGORY_KB_INDEX", "lector_category_kb")
+SEARCH_PIPELINE_NAME = os.environ.get(
+    "CATEGORY_KB_SEARCH_PIPELINE", "lector_hybrid_pipeline"
+)
 
 _kb_client = OpenSearch(
     hosts=[{"host": os.environ["OPENSEARCH_HOST"], "port": 9200}],
@@ -90,7 +93,7 @@ async def _recall_cards(category: str, top_k: int) -> list[CategoryCard]:
     resp = _kb_client.search(
         index=INDEX_NAME,
         body=body,
-        params={"search_pipeline": "globex_hybrid_pipeline"},
+        params={"search_pipeline": SEARCH_PIPELINE_NAME},
     )
 
     cards: list[CategoryCard] = []

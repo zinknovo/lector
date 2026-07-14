@@ -1,6 +1,6 @@
 # Lector 工具层改造计划
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** 将现有 Globex 工具链改造为面向电商选品的工具链，让 Agent 能基于 `app.data.ProductDataSource` 完成"发现品类 → 筛选单品 → 全链路决策"三阶段任务。
 
@@ -58,7 +58,7 @@
 
 **Why:** 让 Agent 在"发现/筛选"阶段能显式触发指定平台的商品抓取。当前支持 `amazon`（Apify）和 `mock`，后续新增平台时直接扩展 `Literal` 和内部路由即可。
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```python
 import asyncio
@@ -105,7 +105,7 @@ def test_product_scraper_returns_mock_products() -> None:
 Run: `uv run pytest tests/test_product_scraper.py -v`
 Expected: FAIL with "cannot import name 'product_scraper'"
 
-- [ ] **Step 2: Implement the tool**
+- [x] **Step 2: Implement the tool**
 
 ```python
 """Platform-aware product scraping tool for the agent."""
@@ -169,12 +169,12 @@ async def product_scraper(
     )
 ```
 
-- [ ] **Step 3: Run tests**
+- [x] **Step 3: Run tests**
 
 Run: `uv run pytest tests/test_product_scraper.py -v`
 Expected: PASS
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add app/tools/product_scraper.py tests/test_product_scraper.py
@@ -196,7 +196,7 @@ git commit -m "feat(tools): add platform-aware product_scraper"
 
 **Why:** 用户要求"搜一次就存一次"，但又不想单独做持久化层。MongoDB 已在项目设计里规划用于 Agent 状态，顺手存搜索结果最自然；Redis 更适合事件/缓存，放大量商品搜索结果不合适。
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```python
 import asyncio
@@ -235,7 +235,7 @@ def test_cache_stores_and_retrieves_products(cache: ProductSearchCache) -> None:
     assert cached[0].product_id == "B123"
 ```
 
-- [ ] **Step 2: Implement the cache**
+- [x] **Step 2: Implement the cache**
 
 ```python
 """MongoDB-backed cache for product search results."""
@@ -328,7 +328,7 @@ class ProductSearchCache:
         )
 ```
 
-- [ ] **Step 3: Wire cache into `ApifyAmazonDataSource`**
+- [x] **Step 3: Wire cache into `ApifyAmazonDataSource`**
 
 Modify `app/data/apify_source.py`:
 
@@ -358,12 +358,12 @@ class ApifyAmazonDataSource(ProductDataSource):
         return _apply_filters(products, filters)
 ```
 
-- [ ] **Step 4: Run tests**
+- [x] **Step 4: Run tests**
 
 Run: `uv run pytest tests/test_data_cache.py -v`
 Expected: PASS（需要本地 MongoDB；CI 中可用 mongomock 或跳过）
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add app/data/cache.py app/data/apify_source.py tests/test_data_cache.py
@@ -384,7 +384,7 @@ git commit -m "feat(data): add MongoDB-backed product search cache"
 
 **Why:** 支持"发现潜力品类"阶段，给 Agent 一个能输出结构化趋势分析的工具。
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```python
 import asyncio
@@ -408,7 +408,7 @@ def test_market_trend_research_returns_structured_output() -> None:
 Run: `uv run pytest tests/test_market_trend_research.py::test_market_trend_research_returns_structured_output -v`
 Expected: FAIL
 
-- [ ] **Step 2: Implement the tool**
+- [x] **Step 2: Implement the tool**
 
 ```python
 """Market trend research tool for product discovery."""
@@ -485,12 +485,12 @@ async def market_trend_research(category: str) -> MarketTrendOutput:
     )
 ```
 
-- [ ] **Step 3: Run tests**
+- [x] **Step 3: Run tests**
 
 Run: `uv run pytest tests/test_market_trend_research.py -v`
 Expected: PASS
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add app/tools/market_trend_research.py tests/test_market_trend_research.py
@@ -511,7 +511,7 @@ git commit -m "feat(tools): add market_trend_research for category discovery"
 
 **Why:** 现有 `item_search` 依赖 Faiss/ANN 本地索引，lector 需要直接从数据源（Mock/Apify）召回。
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```python
 import asyncio
@@ -551,7 +551,7 @@ def test_item_search_filters_by_platform() -> None:
 Run: `uv run pytest tests/test_item_search.py -v`
 Expected: FAIL（新行为未实现）
 
-- [ ] **Step 2: Implement the rewrite**
+- [x] **Step 2: Implement the rewrite**
 
 Replace the body of `app/agent/item_search.py` with:
 
@@ -651,17 +651,17 @@ async def item_search(
     )
 ```
 
-- [ ] **Step 3: Run tests**
+- [x] **Step 3: Run tests**
 
 Run: `uv run pytest tests/test_item_search.py -v`
 Expected: PASS
 
-- [ ] **Step 4: Run full suite to catch regressions**
+- [x] **Step 4: Run full suite to catch regressions**
 
 Run: `uv run pytest`
 Expected: PASS（如果旧测试依赖 Faiss 路径，需要同步更新或删除）
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add app/agent/item_search.py tests/test_item_search.py
@@ -682,7 +682,7 @@ git commit -m "feat(item_search): back search with app.data ProductDataSource"
 
 **Why:** 让 `price_compare` 能直接消费 `item_search` 的结果，也能接受 `Product` 列表。
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```python
 import asyncio
@@ -718,7 +718,7 @@ def test_price_compare_handles_product_input() -> None:
     assert result.ranked[0].item_id == "A2"
 ```
 
-- [ ] **Step 2: Update the tool to accept Product-like dicts**
+- [x] **Step 2: Update the tool to accept Product-like dicts**
 
 `price_compare` 当前接收 `list[Candidate]`。保持该接口不变，但在内部兼容从 dict 反序列化（LangChain 调用时会传入 dict）。通常 Pydantic 会自动处理，但如果传入 `Product` 对象，需要转换。
 
@@ -754,12 +754,12 @@ def _to_candidate(value: object) -> Candidate:
 candidates = [_to_candidate(c) for c in candidates]
 ```
 
-- [ ] **Step 3: Run tests**
+- [x] **Step 3: Run tests**
 
 Run: `uv run pytest tests/test_price_compare.py -v`
 Expected: PASS
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add app/tools/price_compare.py tests/test_price_compare.py
@@ -780,7 +780,7 @@ git commit -m "feat(price_compare): accept Product inputs"
 
 **Why:** 选品核心指标，支撑"全链路决策"阶段。
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```python
 import asyncio
@@ -806,7 +806,7 @@ def test_profit_calculator_computes_margin_and_roi() -> None:
     assert result.roi > 0
 ```
 
-- [ ] **Step 2: Implement the tool**
+- [x] **Step 2: Implement the tool**
 
 ```python
 """Profit calculation tool for product selection."""
@@ -874,12 +874,12 @@ async def profit_calculator(
     )
 ```
 
-- [ ] **Step 3: Run tests**
+- [x] **Step 3: Run tests**
 
 Run: `uv run pytest tests/test_profit_calculator.py -v`
 Expected: PASS
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add app/tools/profit_calculator.py tests/test_profit_calculator.py
@@ -900,11 +900,11 @@ git commit -m "feat(tools): add profit_calculator for selection decisions"
 
 **Why:** 现有评分侧重个人购物偏好（小众、免税、时效），需要增加选品维度（评分、利润、销量、竞争度）。
 
-- [ ] **Step 1: Update existing test expectations**
+- [x] **Step 1: Update existing test expectations**
 
 因为评分逻辑会变，先调整 `tests/test_item_picker.py` 中的断言。
 
-- [ ] **Step 2: Extend scoring logic**
+- [x] **Step 2: Extend scoring logic**
 
 在 `app/tools/item_picker.py` 中增加选品维度：
 
@@ -943,7 +943,7 @@ def _score(
     return round(score, 2), reasons[:3]
 ```
 
-- [ ] **Step 3: Extend `LandedCost` to carry rating/review_count/sales**
+- [x] **Step 3: Extend `LandedCost` to carry rating/review_count/sales**
 
 在 `app/tools/shipping_calc.py` 中：
 
@@ -964,12 +964,12 @@ class LandedCost(BaseModel):
 
 并在 `shipping_calc` 中填充这些字段（从 `PricePoint` 透传，需要在 `PricePoint` 上加字段）。
 
-- [ ] **Step 4: Run tests**
+- [x] **Step 4: Run tests**
 
 Run: `uv run pytest tests/test_item_picker.py tests/test_shipping_calc.py -v`
 Expected: PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add app/tools/item_picker.py app/tools/shipping_calc.py tests/test_item_picker.py tests/test_shipping_calc.py
@@ -990,7 +990,7 @@ git commit -m "feat(item_picker): add selection-oriented scoring dimensions"
 - `LandedCost` 增加 `rating`, `review_count`, `sales`
 - `shipping_calc` 透传这些字段
 
-- [ ] **Step 1: Extend models**
+- [x] **Step 1: Extend models**
 
 `PricePoint`:
 
@@ -1018,7 +1018,7 @@ class LandedCost(BaseModel):
     sales: int | None = None
 ```
 
-- [ ] **Step 2: Update shipping_calc to forward metadata**
+- [x] **Step 2: Update shipping_calc to forward metadata**
 
 ```python
 landed.append(LandedCost(
@@ -1036,7 +1036,7 @@ landed.append(LandedCost(
 ))
 ```
 
-- [ ] **Step 3: Update price_compare to populate new fields**
+- [x] **Step 3: Update price_compare to populate new fields**
 
 ```python
 points.append(PricePoint(
@@ -1071,12 +1071,12 @@ def _product_to_candidate(p: Product) -> Candidate:
     )
 ```
 
-- [ ] **Step 4: Run tests**
+- [x] **Step 4: Run tests**
 
 Run: `uv run pytest tests/test_shipping_calc.py tests/test_price_compare.py tests/test_item_search.py -v`
 Expected: PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add app/tools/shipping_calc.py app/tools/price_compare.py app/agent/item_search.py tests/
@@ -1097,7 +1097,7 @@ git commit -m "feat(shipping): carry rating/review/sales through price and lande
 
 **Why:** 设计思路中列出的新增工具，用于货源风险评估。
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```python
 import asyncio
@@ -1120,7 +1120,7 @@ def test_supplier_evaluator_returns_risk_assessment() -> None:
     assert result.notes
 ```
 
-- [ ] **Step 2: Implement the tool**
+- [x] **Step 2: Implement the tool**
 
 ```python
 """Supplier risk evaluator for sourcing decisions."""
@@ -1201,12 +1201,12 @@ async def supplier_evaluator(
     )
 ```
 
-- [ ] **Step 3: Run tests**
+- [x] **Step 3: Run tests**
 
 Run: `uv run pytest tests/test_supplier_evaluator.py -v`
 Expected: PASS
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add app/tools/supplier_evaluator.py tests/test_supplier_evaluator.py
@@ -1227,7 +1227,7 @@ git commit -m "feat(tools): add supplier_evaluator MVP"
 
 **Why:** 从"购物清单"升级为"选品报告"，输出选品决策依据。
 
-- [ ] **Step 1: Extend output model**
+- [x] **Step 1: Extend output model**
 
 ```python
 class SelectionReport(BaseModel):
@@ -1248,15 +1248,15 @@ class ShoppingSummaryOutput(BaseModel):
     learned_preferences: list[str]
 ```
 
-- [ ] **Step 2: Update the tool to build report**
+- [x] **Step 2: Update the tool to build report**
 
 在 `shopping_summary` 函数中，基于 `picks` 生成 `report` 列表。`profit_margin` 和 `risks` 可以先留空，由调用方传入或后续增强。
 
-- [ ] **Step 3: Update tests**
+- [x] **Step 3: Update tests**
 
 验证 `report` 字段存在且长度与 `picks` 一致。
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add app/tools/shopping_summary.py tests/test_shopping_summary.py
@@ -1274,7 +1274,7 @@ git commit -m "feat(shopping_summary): output structured selection report"
 **Interfaces:**
 - New `FULL_TOOL_SET` includes all adapted/new tools
 
-- [ ] **Step 1: Update registry**
+- [x] **Step 1: Update registry**
 
 ```python
 from app.agent.dispatch_tool import dispatch_tool
@@ -1311,7 +1311,7 @@ FULL_TOOL_SET = [
 ]
 ```
 
-- [ ] **Step 2: Update test**
+- [x] **Step 2: Update test**
 
 ```python
 def test_tool_registry_includes_selection_tools() -> None:
@@ -1323,12 +1323,12 @@ def test_tool_registry_includes_selection_tools() -> None:
     assert "item_search" in names
 ```
 
-- [ ] **Step 3: Run full test suite**
+- [x] **Step 3: Run full test suite**
 
 Run: `uv run pytest`
 Expected: PASS
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add app/agent/tool_registry.py tests/test_tool_registry.py
@@ -1344,7 +1344,7 @@ git commit -m "feat(registry): register lector selection tools"
 
 **Why:** 提供一个可运行的端到端示例，验证三阶段链路。
 
-- [ ] **Step 1: Implement the script**
+- [x] **Step 1: Implement the script**
 
 ```python
 """Demo script: discover -> filter -> decide selection pipeline."""
@@ -1408,12 +1408,12 @@ if __name__ == "__main__":
     asyncio.run(main())
 ```
 
-- [ ] **Step 2: Run the demo**
+- [x] **Step 2: Run the demo**
 
 Run: `uv run python scripts/demo_selection_pipeline.py`
 Expected: Prints three-stage output without errors.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add scripts/demo_selection_pipeline.py

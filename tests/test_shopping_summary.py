@@ -59,6 +59,7 @@ def test_shopping_summary_preserves_decision_evidence(monkeypatch) -> None:
     assert result.report[0].net_profit_cny == 250
     assert result.report[0].supplier_risk_level == RiskLevel.LOW
     assert result.report[0].confidence == 1.0
+    assert fake.messages is not None
     payload = json.loads(fake.messages[1][1])
     assert payload["decisions"][0]["profit_margin"] == 0.5
     assert payload["decisions"][0]["missing_data"] == []

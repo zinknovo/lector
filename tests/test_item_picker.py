@@ -1,5 +1,6 @@
 import asyncio
 import os
+from typing import Literal
 
 os.environ.setdefault("OPENSEARCH_HOST", "localhost")
 os.environ.setdefault("OPENSEARCH_USER", "test")
@@ -18,7 +19,7 @@ def _cost(
     platform: str = "shopee",
     landed_cny: float = 199.0,
     eta_days: int = 10,
-    duty_tier: str = "免征",
+    duty_tier: Literal["免征", "标准", "高税"] = "免征",
     rating: float | None = None,
     review_count: int | None = None,
     sales: int | None = None,

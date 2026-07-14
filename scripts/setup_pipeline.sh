@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# 一次性注册 globex_hybrid_pipeline 到 OpenSearch（开发期执行）
+# 一次性注册 Lector hybrid pipeline 到 OpenSearch（开发期执行）
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -16,7 +16,7 @@ fi
 : "${OPENSEARCH_USER:?OPENSEARCH_USER is required}"
 : "${OPENSEARCH_PASS:?OPENSEARCH_PASS is required}"
 
-PIPELINE_NAME="globex_hybrid_pipeline"
+PIPELINE_NAME="${CATEGORY_KB_SEARCH_PIPELINE:-lector_hybrid_pipeline}"
 
 curl -sS -X PUT "http://${OPENSEARCH_HOST}:9200/_search/pipeline/${PIPELINE_NAME}" \
   -u "${OPENSEARCH_USER}:${OPENSEARCH_PASS}" \

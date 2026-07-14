@@ -50,10 +50,11 @@ class ProductSearchCache:
                 connectTimeoutMS=500,
             )
             collection = client[self._db_name][self._collection_name]
-            collection.create_index(
-                [("created_at", ASCENDING)],
-                expireAfterSeconds=max(0, self._ttl_days * 86400),
-            )
+            if self._ttl_days > 0:
+                collection.create_index(
+                    [("created_at", ASCENDING)],
+                    expireAfterSeconds=self._ttl_days * 86400,
+                )
             self._collection = collection
         except Exception:
             self._collection = None
@@ -71,8 +72,13 @@ class ProductSearchCache:
             if document is None:
                 return None
             created_at = document.get("created_at")
-            if created_at and datetime.now(timezone.utc) - created_at >= timedelta(
-                days=self._ttl_days
+            if isinstance(created_at, datetime) and created_at.tzinfo is None:
+                created_at = created_at.replace(tzinfo=timezone.utc)
+            if (
+                self._ttl_days > 0
+                and created_at
+                and datetime.now(timezone.utc) - created_at
+                >= timedelta(days=self._ttl_days)
             ):
                 collection.delete_one({"_id": key})
                 return None

@@ -1,5 +1,6 @@
 import pytest
 from importlib import import_module
+from typing import Any, cast
 
 from app.agent.llm import get_llm
 
@@ -13,7 +14,7 @@ def test_get_llm_uses_deepseek_defaults(monkeypatch):
     clear_llm_env(monkeypatch)
     monkeypatch.setenv("LLM_API_KEY", "sk-test")
 
-    llm = get_llm(load_env=False)
+    llm = cast(Any, get_llm(load_env=False))
 
     assert llm.model_name == "deepseek-v4-pro"
     assert str(llm.openai_api_base).rstrip("/") == "https://api.deepseek.com"
@@ -27,7 +28,7 @@ def test_get_llm_allows_env_overrides(monkeypatch):
     monkeypatch.setenv("LLM_BASE_URL", "https://example.test/v1")
     monkeypatch.setenv("LLM_TEMPERATURE", "0.2")
 
-    llm = get_llm(load_env=False)
+    llm = cast(Any, get_llm(load_env=False))
 
     assert llm.model_name == "deepseek-reasoner"
     assert str(llm.openai_api_base).rstrip("/") == "https://example.test/v1"

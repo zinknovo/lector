@@ -47,3 +47,24 @@ def test_price_compare_uses_live_rate_for_mixed_currencies(monkeypatch) -> None:
     )
     assert [point.item_id for point in result.ranked] == ["USD", "CNY"]
     assert result.ranked[0].price_cny == 50.0
+
+
+def test_price_compare_extracts_product_weight_for_shipping() -> None:
+    result = asyncio.run(
+        price_compare.ainvoke(
+            {
+                "candidates": [
+                    {
+                        "item_id": "A1",
+                        "platform": "amazon",
+                        "title": "Light item",
+                        "price": 70,
+                        "currency": "CNY",
+                        "attributes": {"weight": "200g"},
+                    }
+                ]
+            }
+        )
+    )
+
+    assert result.ranked[0].weight_kg == 0.2

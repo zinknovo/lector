@@ -10,7 +10,7 @@ from app.api.context import get_thread_id, thread_scope
 
 def _load_dispatch_module(monkeypatch):
     fake_tools = ModuleType("app.agent.tools")
-    fake_tools.FULL_TOOL_SET = []
+    setattr(fake_tools, "FULL_TOOL_SET", [])
     monkeypatch.setitem(sys.modules, "app.agent.tools", fake_tools)
     sys.modules.pop("app.agent.dispatch_tool", None)
     module = importlib.import_module("app.agent.dispatch_tool")
@@ -21,15 +21,17 @@ def _load_dispatch_module(monkeypatch):
 def test_dispatch_sets_depth_recursion_limit_and_restores_context(monkeypatch, tmp_path) -> None:
     module = _load_dispatch_module(monkeypatch)
     fake_registry = ModuleType("app.agent.tool_registry")
-    fake_registry.FULL_TOOL_SET = []
+    setattr(fake_registry, "FULL_TOOL_SET", [])
     monkeypatch.setitem(sys.modules, "app.agent.tool_registry", fake_registry)
 
     class FakeAgent:
-        config = None
+        config: dict | None = None
 
         async def ainvoke(self, _state, config):
             self.config = config
-            assert get_thread_id().endswith("-d1")
+            thread_id = get_thread_id()
+            assert thread_id is not None
+            assert thread_id.endswith("-d1")
             return {"messages": [AIMessage(content="完成")]}
 
     fake_agent = FakeAgent()
@@ -42,13 +44,14 @@ def test_dispatch_sets_depth_recursion_limit_and_restores_context(monkeypatch, t
             return result
 
     assert asyncio.run(run()) == "完成"
+    assert fake_agent.config is not None
     assert fake_agent.config["recursion_limit"] == 12
 
 
 def test_dispatch_returns_readable_message_at_fork_limit(monkeypatch, tmp_path) -> None:
     module = _load_dispatch_module(monkeypatch)
     fake_registry = ModuleType("app.agent.tool_registry")
-    fake_registry.FULL_TOOL_SET = []
+    setattr(fake_registry, "FULL_TOOL_SET", [])
     monkeypatch.setitem(sys.modules, "app.agent.tool_registry", fake_registry)
     from app.agent.fork_guard import enter_fork
 
@@ -63,7 +66,7 @@ def test_dispatch_returns_readable_message_at_fork_limit(monkeypatch, tmp_path) 
 def test_dispatch_returns_readable_message_on_timeout(monkeypatch, tmp_path) -> None:
     module = _load_dispatch_module(monkeypatch)
     fake_registry = ModuleType("app.agent.tool_registry")
-    fake_registry.FULL_TOOL_SET = []
+    setattr(fake_registry, "FULL_TOOL_SET", [])
     monkeypatch.setitem(sys.modules, "app.agent.tool_registry", fake_registry)
 
     class SlowAgent:

@@ -1,5 +1,6 @@
 """跨平台候选商品比价工具。"""
 
+import re
 import time
 
 from langchain_core.tools import tool
@@ -23,6 +24,7 @@ class PricePoint(BaseModel):
     rating: float | None = None
     review_count: int | None = None
     sales: int | None = None
+    weight_kg: float | None = Field(default=None, gt=0)
     note: str | None = None  # 例如 "一套 3 件，等价单件 ~80"
 
 
@@ -40,6 +42,23 @@ def _pack_note(c: Candidate) -> str | None:
     return None
 
 
+def _extract_weight_kg(attributes: dict[str, object]) -> float | None:
+    raw = attributes.get("weight_kg", attributes.get("weight"))
+    if isinstance(raw, bool):
+        return None
+    if isinstance(raw, (int, float)):
+        return float(raw) if raw > 0 else None
+    if not isinstance(raw, str):
+        return None
+    match = re.fullmatch(r"\s*(\d+(?:\.\d+)?)\s*(kg|g)?\s*", raw.lower())
+    if not match:
+        return None
+    value = float(match.group(1))
+    if match.group(2) == "g":
+        value /= 1000
+    return value if value > 0 else None
+
+
 def _to_candidate(value: Candidate | Product) -> Candidate:
     if isinstance(value, Candidate):
         return value
@@ -53,6 +72,7 @@ def _to_candidate(value: Candidate | Product) -> Candidate:
         review_count=value.review_count,
         sales=value.sales_volume,
         image_url=value.image_url,
+        seller=value.seller,
         attributes=value.attributes,
     )
 
@@ -108,6 +128,7 @@ async def price_compare(
             rating=c.rating,
             review_count=c.review_count,
             sales=c.sales,
+            weight_kg=_extract_weight_kg(c.attributes),
             note=_pack_note(c),
         ))
 

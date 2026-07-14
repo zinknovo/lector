@@ -5,7 +5,7 @@ import json
 from app.agent.llm import get_judge_llm
 from app.recall.category_norm import normalize_category
 
-EXTRACT_PROMPT = """你是 Globex 品类知识库的卡片抽取器。
+EXTRACT_PROMPT = """你是 Lector 品类知识库的卡片抽取器。
 
 输入：关于「{category}」的原始资料（评论、销量榜、商品聚合等）。
 输出：按约定格式写 CategoryCard 字段。
@@ -31,4 +31,10 @@ async def extract_card(category: str, raw_text: str, card_type: str) -> dict:
             ("user", f"card_type={card_type}\n\n资料：\n{raw_text}"),
         ]
     )
-    return json.loads(resp.content)
+    content = resp.content
+    if not isinstance(content, str):
+        raise ValueError("Category card extractor must return JSON text")
+    parsed = json.loads(content)
+    if not isinstance(parsed, dict):
+        raise ValueError("Category card extractor must return a JSON object")
+    return parsed

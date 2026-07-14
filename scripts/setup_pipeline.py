@@ -1,10 +1,12 @@
-"""注册 globex_hybrid_pipeline 到 OpenSearch。"""
+"""Register the Lector hybrid-search pipeline in OpenSearch."""
 
 import os
 
 from opensearchpy import OpenSearch
 
-PIPELINE_NAME = "globex_hybrid_pipeline"
+PIPELINE_NAME = os.environ.get(
+    "CATEGORY_KB_SEARCH_PIPELINE", "lector_hybrid_pipeline"
+)
 
 PIPELINE_BODY = {
     "description": "KNN + BM25 双路召回的归一与加权融合",

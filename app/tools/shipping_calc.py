@@ -26,6 +26,7 @@ class LandedCost(BaseModel):
     rating: float | None = None
     review_count: int | None = None
     sales: int | None = None
+    weight_kg: float | None = None
 
 
 class ShippingCalcOutput(BaseModel):
@@ -33,10 +34,9 @@ class ShippingCalcOutput(BaseModel):
     items: list[LandedCost]
 
 
-def _guess_weight_kg(_p: PricePoint) -> float:
-    """从 PricePoint 反推出大致重量。真实项目应来自 Candidate.attributes。"""
-    # 这里给一个占位值；后续 CategoryInsight 会把品类典型重量补回来
-    return 0.5
+def _weight_kg(point: PricePoint) -> float:
+    """Use normalized product weight, with a conservative MVP fallback."""
+    return point.weight_kg if point.weight_kg is not None else 0.5
 
 
 @tool
@@ -61,7 +61,7 @@ async def shipping_calc(
 
     landed: list[LandedCost] = []
     for p in points:
-        weight = _guess_weight_kg(p)
+        weight = _weight_kg(p)
         shipping_cny, eta = estimate_shipping(weight, p.platform)
         duty_cny, duty_tier = estimate_duty(p.price_cny, p.platform)
         total = round(p.price_cny + shipping_cny + duty_cny, 2)
@@ -77,6 +77,7 @@ async def shipping_calc(
             rating=p.rating,
             review_count=p.review_count,
             sales=p.sales,
+            weight_kg=p.weight_kg,
         ))
 
     landed.sort(key=lambda x: x.landed_cny)
