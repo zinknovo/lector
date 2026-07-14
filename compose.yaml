@@ -14,42 +14,6 @@ services:
       timeout: 5s
       retries: 10
 
-  opensearch:
-    image: public.ecr.aws/opensearchproject/opensearch:3.6.0
-    restart: unless-stopped
-    environment:
-      discovery.type: single-node
-      DISABLE_INSTALL_DEMO_CONFIG: "true"
-      DISABLE_SECURITY_PLUGIN: "true"
-      OPENSEARCH_JAVA_OPTS: "-Xms512m -Xmx512m"
-    ports:
-      - "127.0.0.1:9200:9200"
-      - "127.0.0.1:9600:9600"
-    volumes:
-      - opensearch-data:/usr/share/opensearch/data
-    healthcheck:
-      test: ["CMD-SHELL", "curl -fsS http://localhost:9200/_cluster/health || exit 1"]
-      interval: 15s
-      timeout: 5s
-      retries: 20
-
-  tower:
-    build:
-      context: .
-      dockerfile: services/tower/Dockerfile
-    restart: unless-stopped
-    environment:
-      TOWER_MODEL: BAAI/bge-m3
-    ports:
-      - "127.0.0.1:8001:8001"
-    volumes:
-      - huggingface-cache:/models/huggingface
-    healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8001/health')"]
-      interval: 30s
-      timeout: 10s
-      retries: 30
-
   agent:
     build:
       context: .
@@ -60,20 +24,10 @@ services:
         required: false
     environment:
       MONGODB_URL: mongodb://mongodb:27017/lector
-      OPENSEARCH_HOST: opensearch
-      OPENSEARCH_PORT: "9200"
-      TOWER_USER_ENDPOINT: http://tower:8001/encode/user
-      TOWER_QUERY_ENDPOINT: http://tower:8001/encode/query
-      CATEGORY_KB_INDEX: lector_category_kb
-      CATEGORY_KB_SEARCH_PIPELINE: lector_hybrid_pipeline
     ports:
       - "127.0.0.1:8000:8000"
     depends_on:
       mongodb:
-        condition: service_healthy
-      opensearch:
-        condition: service_healthy
-      tower:
         condition: service_healthy
 
   gateway:
@@ -108,5 +62,3 @@ services:
 
 volumes:
   mongodb-data:
-  opensearch-data:
-  huggingface-cache:

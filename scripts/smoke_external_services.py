@@ -13,7 +13,7 @@ sys.path.insert(0, str(ROOT))
 
 from app.integrations.readiness import run_readiness
 
-ALL_SERVICES = {"apify", "mongodb", "llm", "web_search", "opensearch", "tower"}
+ALL_SERVICES = {"apify", "mongodb", "llm", "web_search"}
 
 
 def _parse_services(raw: str) -> set[str]:
@@ -31,7 +31,6 @@ def main() -> None:
         os.environ.get("APIFY_API_TOKEN", ""),
         os.environ.get("LLM_API_KEY", ""),
         os.environ.get("MONGODB_URL", ""),
-        os.environ.get("OPENSEARCH_PASS", ""),
     ]
     report = asyncio.run(
         run_readiness(_parse_services(args.services), secrets=secrets)

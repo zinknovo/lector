@@ -1,13 +1,11 @@
 import asyncio
-from types import SimpleNamespace
 
 from app.integrations.readiness import (
     CapabilitySkipped,
     CheckStatus,
     _check_apify,
     _check_mongodb,
-    _check_tower,
-    _validate_vector,
+    _production_checks,
     run_readiness,
 )
 
@@ -39,16 +37,8 @@ def test_readiness_reports_pass_fail_skip_and_redacts_secrets() -> None:
     assert report.exit_code == 1
 
 
-def test_vector_validation_requires_1024_finite_numbers() -> None:
-    assert _validate_vector([0.0] * 1024) == "1024-dimensional vector"
-
-    for vector in ([0.0] * 10, [0.0] * 1023 + [float("nan")]):
-        try:
-            _validate_vector(vector)
-        except ValueError:
-            pass
-        else:
-            raise AssertionError("invalid vector must be rejected")
+def test_production_checks_exclude_removed_services() -> None:
+    assert set(_production_checks()) == {"apify", "mongodb", "llm", "web_search"}
 
 
 def test_readiness_times_out_each_external_check() -> None:
@@ -157,23 +147,3 @@ def test_mongodb_check_pings_and_round_trips_cache(monkeypatch) -> None:
 
     assert asyncio.run(_check_mongodb()) == "ping and cache round-trip"
     assert Client.closed is True
-
-
-def test_tower_check_rejects_wrong_dimension(monkeypatch) -> None:
-    class FakeTowerClient:
-        client = SimpleNamespace(aclose=lambda: asyncio.sleep(0))
-
-        async def encode_query(self, query):
-            assert query == "wireless earbuds"
-            return [0.0] * 16
-
-    monkeypatch.setenv("TOWER_QUERY_ENDPOINT", "http://tower/encode/query")
-    monkeypatch.setenv("TOWER_USER_ENDPOINT", "http://tower/encode/user")
-    monkeypatch.setattr("app.recall.towers.TowerClient", FakeTowerClient)
-
-    try:
-        asyncio.run(_check_tower())
-    except ValueError as exc:
-        assert "1024 dimensions" in str(exc)
-    else:
-        raise AssertionError("wrong tower dimension must fail")

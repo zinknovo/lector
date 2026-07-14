@@ -1,12 +1,5 @@
 import asyncio
-import os
 from typing import Literal
-
-os.environ.setdefault("OPENSEARCH_HOST", "localhost")
-os.environ.setdefault("OPENSEARCH_USER", "test")
-os.environ.setdefault("OPENSEARCH_PASS", "test")
-os.environ.setdefault("TOWER_USER_ENDPOINT", "http://localhost/user")
-os.environ.setdefault("TOWER_QUERY_ENDPOINT", "http://localhost/query")
 
 from app.tools.category_insight import CategoryInsightOutput, PriceTier
 from app.tools.item_picker import _check_preferences, _score, item_picker

@@ -1,14 +1,12 @@
 """Strict, independently reported checks for Lector external capabilities."""
 
 import asyncio
-import math
 import os
 import time
 import uuid
 from collections.abc import Awaitable, Callable, Mapping, Sequence
 from decimal import Decimal
 from enum import Enum
-from typing import Any
 
 from pydantic import BaseModel
 
@@ -63,14 +61,6 @@ def _redact(detail: str, secrets: Sequence[str]) -> str:
         if secret:
             redacted = redacted.replace(secret, "***")
     return redacted[:500]
-
-
-def _validate_vector(vector: list[float]) -> str:
-    if len(vector) != 1024:
-        raise ValueError(f"expected 1024 dimensions, received {len(vector)}")
-    if not all(isinstance(value, (int, float)) and math.isfinite(value) for value in vector):
-        raise ValueError("embedding contains non-finite values")
-    return "1024-dimensional vector"
 
 
 async def _check_apify(api_token: str | None = None) -> str:
@@ -155,53 +145,12 @@ async def _check_web_search() -> str:
     return f"{len(result.results)} cited result"
 
 
-async def _check_opensearch() -> str:
-    host = os.environ.get("OPENSEARCH_HOST")
-    if not host:
-        raise CapabilitySkipped("OPENSEARCH_HOST is not configured")
-
-    def cluster_health() -> str:
-        from opensearchpy import OpenSearch
-
-        user = os.environ.get("OPENSEARCH_USER")
-        password = os.environ.get("OPENSEARCH_PASS")
-        auth = (user, password) if user and password else None
-        client = OpenSearch(
-            hosts=[{"host": host, "port": int(os.environ.get("OPENSEARCH_PORT", "9200"))}],
-            http_auth=auth,
-            use_ssl=False,
-            timeout=_native_timeout_seconds(),
-        )
-        try:
-            health: dict[str, Any] = client.cluster.health()
-            return f"cluster status={health.get('status', 'unknown')}"
-        finally:
-            client.close()
-
-    return await asyncio.to_thread(cluster_health)
-
-
-async def _check_tower() -> str:
-    if not os.environ.get("TOWER_QUERY_ENDPOINT"):
-        raise CapabilitySkipped("TOWER_QUERY_ENDPOINT is not configured")
-    from app.recall.towers import TowerClient
-
-    client = TowerClient()
-    try:
-        vector = await client.encode_query("wireless earbuds")
-        return _validate_vector(vector)
-    finally:
-        await client.client.aclose()
-
-
 def _production_checks() -> dict[str, AsyncCheck]:
     return {
         "apify": _check_apify,
         "mongodb": _check_mongodb,
         "llm": _check_llm,
         "web_search": _check_web_search,
-        "opensearch": _check_opensearch,
-        "tower": _check_tower,
     }
 
 

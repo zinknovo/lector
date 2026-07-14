@@ -13,7 +13,6 @@ dependencies = [
     "langchain-openai>=1.0.0",
     "langgraph>=1.2.0",
     "numpy>=1.26.0",
-    "opensearch-py>=2.6.0",
     "python-dotenv>=1.0.1",
     "python-multipart>=0.0.20",
     "pymongo>=4.10.0",
