@@ -45,14 +45,13 @@ LLM_WEB_SEARCH_BACKEND=auto
 
 ## 品类知识库
 
-`category_insight` 使用 OpenSearch 的 BM25 + KNN 混合检索。准备好 `data/category_cards.jsonl` 和 1024 维 Query Tower 后执行：
+`category_insight` 从 MongoDB 的 `category_cards` 集合读取经过审核的结构化卡片。准备好 `data/category_cards.jsonl` 后执行：
 
 ```bash
-uv run python scripts/setup_pipeline.py
 uv run python scripts/build_category_kb.py
 ```
 
-构建脚本会逐行校验 `CategoryCard`、过滤低置信度数据、生成向量并写入 `lector_category_kb`。索引和搜索 pipeline 名称可通过 `CATEGORY_KB_INDEX`、`CATEGORY_KB_SEARCH_PIPELINE` 覆盖。
+构建脚本会逐行校验 `CategoryCard`、过滤低置信度数据、归一化品类名，并按 `card_id` 幂等写入 MongoDB。工具层只依赖 `CategoryKnowledgeStore` 接口，后续可以增加新的检索后端而不改工具签名。
 
 ## 三阶段 Demo
 
@@ -96,9 +95,8 @@ docker compose up --build
 ```
 
 服务入口：前端 `http://127.0.0.1:5173`，Java 网关 `http://127.0.0.1:8080`，
-内部 Python Agent `http://127.0.0.1:8000`。MongoDB、OpenSearch 和 BGE-M3
-Query Tower 也由 Compose 启动。首次启动 Query Tower 会下载模型，耗时和磁盘占用
-取决于 Hugging Face 缓存状态。
+内部 Python Agent `http://127.0.0.1:8000`。MongoDB 由 Compose 启动，同时存储
+Amazon 搜索缓存和结构化品类知识。默认栈共四个服务：MongoDB、Agent、Gateway、Frontend。
 
 完整部署、严格外部检查和报告导出命令见
 [`docs/production-readiness.md`](docs/production-readiness.md)。

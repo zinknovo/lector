@@ -30,32 +30,25 @@ cp .env.example .env
 docker compose up --build
 ```
 
-基础镜像使用 AWS Public ECR 中的 Docker Official Images 和 OpenSearch 官方镜像，
-避免本机网络无法访问 Docker Hub 时阻塞构建。ECR 匿名拉取有频率限制，首次构建若
-出现 `Rate exceeded`，应串行重试，已下载的 layer 会继续复用。
-Query Tower 从 PyTorch 官方 CPU wheel 源安装固定版本，避免 Linux ARM 环境误装
-CUDA runtime。
+MongoDB 基础镜像使用 AWS Public ECR 中的 Docker Official Image，避免本机网络
+无法访问 Docker Hub 时阻塞构建。ECR 匿名拉取有频率限制，首次构建若出现
+`Rate exceeded`，应串行重试，已下载的 layer 会继续复用。
 
 | 服务 | 地址 | 用途 |
 | --- | --- | --- |
 | Frontend | `http://127.0.0.1:5173` | Nginx 静态站点及 API/WS 反向代理 |
 | Gateway | `http://127.0.0.1:8080` | API Key、限流、Prometheus、REST/WS 转发 |
 | Agent | `http://127.0.0.1:8000` | 内部 FastAPI + LangGraph 服务 |
-| Query Tower | `http://127.0.0.1:8001` | BGE-M3 1024 维归一化向量 |
-| OpenSearch | `http://127.0.0.1:9200` | 品类知识库混合检索 |
-| MongoDB | `mongodb://127.0.0.1:27017/lector` | Amazon 搜索结果缓存 |
+| MongoDB | `mongodb://127.0.0.1:27017/lector` | Amazon 搜索缓存和结构化品类知识 |
 
 本机已有 MongoDB 时，可在 `.env` 设置 `MONGODB_HOST_PORT=27018`；容器之间的地址和
 端口不受影响。此时从宿主机执行 MongoDB smoke 或使用缓存，还要把 `MONGODB_URL`
 设置为 `mongodb://127.0.0.1:27018/lector`。
 
-OpenSearch 的安全插件仅在这个仅绑定回环地址的本地 Compose 配置中关闭。Query Tower 首次启动需要
-下载 `BAAI/bge-m3`，健康检查会等模型加载完成。
-
 只启动基础依赖：
 
 ```bash
-docker compose up -d mongodb opensearch tower
+docker compose up -d mongodb
 ```
 
 停止并清理本次本地数据卷：
@@ -69,12 +62,13 @@ docker compose down -v
 准备经过审核的 `data/category_cards.jsonl` 后执行：
 
 ```bash
-uv run python scripts/setup_pipeline.py
-uv run python scripts/build_category_kb.py
+uv run python scripts/build_category_kb.py \
+  --cards-path data/category_cards.jsonl
 ```
 
-构建脚本会校验卡片、过滤低置信度记录、调用 Query Tower，并写入 OpenSearch。
-仓库不附带伪造的生产品类卡；没有真实卡片时不要把空索引当成检索验收通过。
+构建脚本会校验卡片、过滤低置信度记录、归一化品类名，并按 `card_id` 幂等写入
+MongoDB 的 `category_cards` 集合。仓库不附带伪造的生产品类卡；没有真实卡片时
+不要把空集合当成检索验收通过。
 
 ## 4. 严格外部检查
 
@@ -88,7 +82,7 @@ uv run python scripts/smoke_external_services.py --services configured
 
 ```bash
 uv run python scripts/smoke_external_services.py \
-  --services apify,mongodb,llm,web_search,opensearch,tower
+  --services apify,mongodb,llm,web_search
 ```
 
 状态语义：
@@ -98,7 +92,7 @@ uv run python scripts/smoke_external_services.py \
 - `skipped`：缺少配置或后端明确不支持；不是成功验收。
 
 Apify 检查直接实例化 `ApifyAmazonDataSource`，不会回退到 Mock。MongoDB 会执行
-ping 和缓存往返；Tower 会校验恰好 1024 个有限浮点数。
+ping 和缓存往返。
 
 ## 5. 报告导出
 
@@ -128,8 +122,7 @@ mvn -f lector-api/pom.xml spring-boot:run
 
 ```bash
 uv run pytest
-uv run basedpyright app tests scripts services
-uv run pytest services/tower/tests/test_app.py
+uv run basedpyright app tests scripts
 pnpm --dir frontend test -- --run
 pnpm --dir frontend build
 mvn -f lector-api/pom.xml test
@@ -138,5 +131,5 @@ uv run python scripts/demo_selection_pipeline.py
 uv run python scripts/smoke_external_services.py --services configured
 ```
 
-前八项必须退出 0。最后一项按上述状态语义判断；任何 `skipped` 的外部能力仍需补齐
+前七项必须退出 0。最后一项按上述状态语义判断；任何 `skipped` 的外部能力仍需补齐
 真实凭据或兼容后端后重新验收。

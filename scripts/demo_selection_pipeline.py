@@ -1,7 +1,6 @@
 """Demo: discover category -> filter products -> make selection decisions."""
 
 import asyncio
-import os
 import sys
 from pathlib import Path
 
@@ -10,11 +9,6 @@ from dotenv import load_dotenv
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 load_dotenv(ROOT / ".env")
-os.environ.setdefault("OPENSEARCH_HOST", "localhost")
-os.environ.setdefault("OPENSEARCH_USER", "demo")
-os.environ.setdefault("OPENSEARCH_PASS", "demo")
-os.environ.setdefault("TOWER_USER_ENDPOINT", "http://localhost/user")
-os.environ.setdefault("TOWER_QUERY_ENDPOINT", "http://localhost/query")
 
 from app.agent.item_search import item_search
 from app.tools.item_picker import item_picker
