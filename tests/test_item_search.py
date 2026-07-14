@@ -20,3 +20,4 @@ def test_item_search_carries_product_metrics() -> None:
     candidate = result.candidates[0]
     assert candidate.review_count == 3400
     assert candidate.sales == 5600
+    assert candidate.seller == "SoundWave"

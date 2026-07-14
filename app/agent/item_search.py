@@ -20,6 +20,7 @@ class Candidate(BaseModel):
     review_count: int | None = None
     sales: int | None = None
     image_url: str | None = None
+    seller: str | None = None
     attributes: dict[str, Any] = Field(default_factory=dict)
 
 
@@ -41,6 +42,7 @@ def _product_to_candidate(product: Product) -> Candidate:
         review_count=product.review_count,
         sales=product.sales_volume,
         image_url=product.image_url,
+        seller=product.seller,
         attributes=product.attributes,
     )
 
