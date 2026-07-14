@@ -41,10 +41,17 @@ async def planner(query: str) -> PlannerOutput:
     """
     await monitor.report_tool_start("planner", {"query": query})
     started_at = time.time()
-    structured_llm = get_llm().with_structured_output(PlannerOutput)
+    structured_llm = get_llm().with_structured_output(
+        PlannerOutput,
+        method="json_mode",
+    )
     response = await structured_llm.ainvoke(
         [
-            ("system", get_planner_prompt()),
+            (
+                "system",
+                f"{get_planner_prompt()}\n\nJSON Schema:\n"
+                f"{PlannerOutput.model_json_schema()}",
+            ),
             ("user", query),
         ]
     )

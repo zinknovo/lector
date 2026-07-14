@@ -25,9 +25,11 @@ def test_planner_uses_llm_to_extract_selection_intent(monkeypatch) -> None:
 
     class FakeLLM:
         schema = None
+        method = None
 
-        def with_structured_output(self, schema):
+        def with_structured_output(self, schema, *, method):
             self.schema = schema
+            self.method = method
             return structured
 
     structured = FakeStructuredLLM()
@@ -42,5 +44,7 @@ def test_planner_uses_llm_to_extract_selection_intent(monkeypatch) -> None:
 
     assert result == expected
     assert llm.schema is PlannerOutput
+    assert llm.method == "json_mode"
     assert structured.messages is not None
+    assert "JSON Schema" in structured.messages[0][1]
     assert "目标毛利率 30%" in structured.messages[1][1]
