@@ -119,21 +119,19 @@ class TestApifyAmazonDataSource:
                 captured["cached"] = len(products)
 
         class Actor:
-            def start(self, **kwargs):
+            async def start(self, **kwargs):
                 captured["start"] = kwargs
                 return type("StartedRun", (), {"id": "run-1"})()
 
         class Run:
-            def wait_for_finish(self, **kwargs):
+            async def wait_for_finish(self, **kwargs):
                 captured["wait"] = kwargs
                 return {"defaultDatasetId": "dataset-1"}
 
         class Dataset:
-            def iterate_items(self, **kwargs):
+            async def iterate_items(self, **kwargs):
                 captured["dataset"] = kwargs
-                return iter(
-                    [{"asin": "B001", "name": "Earbuds", "price": 20}]
-                )
+                yield {"asin": "B001", "name": "Earbuds", "price": 20}
 
         class Client:
             def __init__(self, token, **kwargs):
@@ -149,7 +147,7 @@ class TestApifyAmazonDataSource:
                 assert run_id == "run-1"
                 return Run()
 
-        monkeypatch.setattr("apify_client.ApifyClient", Client)
+        monkeypatch.setattr("apify_client.ApifyClientAsync", Client)
         source = ApifyAmazonDataSource(
             api_token="fake-token",
             cache=Cache(),  # pyright: ignore[reportArgumentType]

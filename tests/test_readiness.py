@@ -88,7 +88,7 @@ def test_apify_check_uses_direct_amazon_source(monkeypatch) -> None:
         ):
             self.token = api_token
             type(self).timeout = request_timeout_seconds
-            assert max_retries == 0
+            assert max_retries == 1
             assert use_cache is False
 
         async def search(self, query: str, **filters):

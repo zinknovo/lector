@@ -81,7 +81,7 @@ async def _check_apify(api_token: str | None = None) -> str:
     source = ApifyAmazonDataSource(
         api_token=token,
         request_timeout_seconds=max(1.0, timeout * 0.8),
-        max_retries=0,
+        max_retries=1,
         use_cache=False,
     )
     products = await source.search("wireless earbuds", max_results=1, limit=1)

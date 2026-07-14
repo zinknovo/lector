@@ -74,7 +74,7 @@ class ApifyAmazonDataSource(ProductDataSource):
                 return _apply_filters(cached, filters)
 
         try:
-            from apify_client import ApifyClient
+            from apify_client import ApifyClientAsync
         except ImportError as exc:
             raise DataSourceError(
                 "apify-client is not installed; run `uv sync` to install it."
@@ -88,7 +88,7 @@ class ApifyAmazonDataSource(ProductDataSource):
             "maxSearchPages": filters.get("max_search_pages", 1),
         }
 
-        def fetch_items() -> list[dict[str, Any]]:
+        async def fetch_items() -> list[dict[str, Any]]:
             deadline = time.monotonic() + self._request_timeout_seconds
 
             def remaining() -> timedelta:
@@ -96,7 +96,7 @@ class ApifyAmazonDataSource(ProductDataSource):
                 return timedelta(seconds=seconds)
 
             request_timeout = remaining()
-            client = ApifyClient(
+            client = ApifyClientAsync(
                 self._api_token,
                 max_retries=self._max_retries,
                 timeout_short=request_timeout,
@@ -105,25 +105,28 @@ class ApifyAmazonDataSource(ProductDataSource):
                 timeout_max=request_timeout,
             )
             run_timeout = remaining()
-            started = client.actor(self._actor_id).start(
+            started = await client.actor(self._actor_id).start(
                 run_input=run_input,
                 run_timeout=run_timeout,
                 timeout=run_timeout,
             )
             wait_timeout = remaining()
-            run = client.run(str(started.id)).wait_for_finish(
+            run = await client.run(str(started.id)).wait_for_finish(
                 wait_duration=wait_timeout,
                 timeout=wait_timeout,
             )
             if run is None:
                 raise TimeoutError("Apify Actor did not finish before deadline")
             dataset_id = _dataset_id_from_run(run)
-            return list(
-                client.dataset(dataset_id).iterate_items(timeout=remaining())
-            )
+            return [
+                item
+                async for item in client.dataset(dataset_id).iterate_items(
+                    timeout=remaining()
+                )
+            ]
 
         try:
-            items = await asyncio.to_thread(fetch_items)
+            items = await fetch_items()
         except Exception as exc:
             raise DataSourceError(
                 f"Apify Actor {self._actor_id} failed for query {query!r}"
