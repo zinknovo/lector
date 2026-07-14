@@ -1,6 +1,6 @@
 # Lector Production Readiness Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** Turn the completed Python selection-tool MVP into a locally deployable, externally verifiable system with strict smoke checks, real category embeddings, downloadable PDF/XLSX reports, and a Spring Boot gateway.
 
@@ -33,21 +33,21 @@
 - Produces: `run_readiness(selected: set[str]) -> ReadinessReport`.
 - CLI: `uv run python scripts/smoke_external_services.py --services apify,mongodb,llm,web_search,opensearch,tower`.
 
-- [ ] **Step 1: Write failing tests**
+- [x] **Step 1: Write failing tests**
 
 Test that missing credentials are `skipped`, a direct Apify adapter returns normalized Amazon products, Mongo performs ping plus cache round-trip, tower rejects vectors whose length is not 1024, and JSON output contains no secret values.
 
-- [ ] **Step 2: Run tests and verify RED**
+- [x] **Step 2: Run tests and verify RED**
 
 Run: `uv run pytest tests/test_readiness.py -v`
 
 Expected: import failure for `app.integrations.readiness`.
 
-- [ ] **Step 3: Implement checks and CLI**
+- [x] **Step 3: Implement checks and CLI**
 
 Use injected async callables for unit tests. Production adapters call `ApifyAmazonDataSource`, `MongoClient.admin.command("ping")`, `planner`, `web_search`, OpenSearch cluster health, and `TowerClient.encode_query`. Catch each capability independently and redact exception text through a helper that replaces configured secret values with `***`.
 
-- [ ] **Step 4: Verify GREEN**
+- [x] **Step 4: Verify GREEN**
 
 Run: `uv run pytest tests/test_readiness.py -v`
 
@@ -72,21 +72,21 @@ Expected: all tests pass.
 - `GET /health` -> model name, dimension and readiness.
 - Compose services expose MongoDB `27017`, OpenSearch `9200`, Query Tower `8001` and Python Agent `8000`.
 
-- [ ] **Step 1: Write failing tower API tests**
+- [x] **Step 1: Write failing tower API tests**
 
 Inject a fake encoder and assert normalization, 1024 dimensions, empty-input rejection and health output.
 
-- [ ] **Step 2: Run tests and verify RED**
+- [x] **Step 2: Run tests and verify RED**
 
 Run: `uv run pytest services/tower/tests/test_app.py -v`
 
 Expected: missing `services.tower.app`.
 
-- [ ] **Step 3: Implement tower and Compose stack**
+- [x] **Step 3: Implement tower and Compose stack**
 
 Load `SentenceTransformer("BAAI/bge-m3")` once during application lifespan, normalize embeddings, and validate dimension. Pin OpenSearch to `3.6.0`; disable the security plugin only for local development. Add healthchecks and service dependencies.
 
-- [ ] **Step 4: Validate configuration**
+- [x] **Step 4: Validate configuration**
 
 Run: `docker compose config --quiet` and `uv run pytest services/tower/tests/test_app.py -v`.
 
@@ -107,21 +107,21 @@ Expected: exit 0.
 - `export_selection_report(report: ShoppingSummaryOutput, output_dir: Path, basename: str) -> ExportedReport`.
 - Produces `<basename>.pdf` and `<basename>.xlsx`; `ExportedReport` contains absolute paths.
 
-- [ ] **Step 1: Write failing tests**
+- [x] **Step 1: Write failing tests**
 
 Build a `ShoppingSummaryOutput` with recommend/watch rows. Assert both files exist, XLSX headers and numeric cells are preserved, and PDF begins with `%PDF` and contains at least one page.
 
-- [ ] **Step 2: Run tests and verify RED**
+- [x] **Step 2: Run tests and verify RED**
 
 Run: `uv run pytest tests/test_report_exporter.py -v`
 
 Expected: missing exporter module.
 
-- [ ] **Step 3: Implement deterministic exports**
+- [x] **Step 3: Implement deterministic exports**
 
 Use `openpyxl` for XLSX and ReportLab with a bundled CJK-capable CID font for PDF. Escape formulas in user-controlled spreadsheet strings by prefixing a single quote when the first character is `=`, `+`, `-`, or `@`.
 
-- [ ] **Step 4: Verify GREEN and inspect files**
+- [x] **Step 4: Verify GREEN and inspect files**
 
 Run: `uv run pytest tests/test_report_exporter.py -v`.
 
@@ -149,21 +149,21 @@ Expected: all tests pass with no temporary files outside pytest directories.
 - Header `X-API-Key` is required except for health; token-bucket limit is configurable per key.
 - WebSocket `/ws/{threadId}` proxies bidirectionally to Python and preserves JSON event payloads.
 
-- [ ] **Step 1: Write failing WebFlux tests**
+- [x] **Step 1: Write failing WebFlux tests**
 
 Assert missing/incorrect keys return 401, rate-limit exhaustion returns 429, valid task requests preserve body and response, unsafe file names are rejected, and health is public.
 
-- [ ] **Step 2: Run tests and verify RED**
+- [x] **Step 2: Run tests and verify RED**
 
 Run: `mvn -f lector-api/pom.xml test`
 
 Expected: compile failure because gateway classes are absent.
 
-- [ ] **Step 3: Implement gateway and production protection**
+- [x] **Step 3: Implement gateway and production protection**
 
 Use Spring WebFlux `WebClient`, Spring Security, Actuator, Micrometer Prometheus and Bucket4j. Bind upstream URL, API key and rate parameters from environment variables. Do not log request authorization headers or upstream credentials.
 
-- [ ] **Step 4: Verify GREEN**
+- [x] **Step 4: Verify GREEN**
 
 Run: `mvn -f lector-api/pom.xml test`.
 
@@ -183,11 +183,11 @@ Expected: all tests pass.
 - Strict smoke: `uv run python scripts/smoke_external_services.py --services configured`.
 - Gateway start: `mvn -f lector-api/pom.xml spring-boot:run`.
 
-- [ ] **Step 1: Document exact startup and gate semantics**
+- [x] **Step 1: Document exact startup and gate semantics**
 
 Document which checks are locally verifiable, which require real credentials, and that a skipped Apify check is not a successful live integration.
 
-- [ ] **Step 2: Run the complete verification matrix**
+- [x] **Step 2: Run the complete verification matrix**
 
 Run:
 
