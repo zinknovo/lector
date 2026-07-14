@@ -18,6 +18,7 @@ def test_exchange_rate_refuses_to_guess_without_search_evidence(monkeypatch) -> 
         async def ainvoke(self, payload):
             return WebSearchOutput(
                 query=payload["query"],
+                provider="fake",
                 status="unavailable",
                 error="not configured",
             )

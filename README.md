@@ -29,10 +29,19 @@ LLM_BASE_URL=
 APIFY_API_TOKEN=
 USE_MOCK=true
 MONGODB_URL=
-TAVILY_API_KEY=
+LLM_WEB_SEARCH_BACKEND=auto
 ```
 
-`TAVILY_API_KEY` 用于真实网页搜索。未配置时 `web_search` 返回明确的 `unavailable` 状态，趋势研究降级为数据不足，非同币种汇率不会使用模型猜测。`price_compare`、`exchange_rate` 和 `profit_calculator` 共用动态汇率结果及进程内缓存。
+`web_search` 通过统一接口调用当前模型端的内置搜索，不需要独立搜索供应商或额外密钥。`auto` 当前会为 OpenAI 官方端点绑定 Responses API 的 `web_search` 工具；DeepSeek API 尚未提供可绑定的服务端内置搜索，因此会返回明确的 `unavailable` 状态。趋势研究会降级为数据不足，非同币种汇率不会使用模型猜测。`price_compare`、`exchange_rate` 和 `profit_calculator` 共用动态汇率结果及进程内缓存。
+
+启用 OpenAI 内置搜索时，沿用现有 LLM 配置：
+
+```dotenv
+LLM_BASE_URL=https://api.openai.com/v1
+LLM_MODEL_NAME=gpt-5
+LLM_API_KEY=
+LLM_WEB_SEARCH_BACKEND=auto
+```
 
 ## 三阶段 Demo
 

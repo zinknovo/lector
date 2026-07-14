@@ -1,51 +1,77 @@
 import asyncio
-import json
 
-import httpx
+from app.tools.web_search import (
+    OpenAIResponsesWebSearchBackend,
+    UnavailableWebSearchBackend,
+    WebSearchOutput,
+    get_web_search_backend,
+    web_search,
+)
 
-from app.tools.web_search import WebSearchOutput, _search_tavily, web_search
+
+class FakeResponse:
+    output_text = "Demand for earbuds is growing."
+
+    def model_dump(self):
+        return {
+            "output": [
+                {
+                    "type": "message",
+                    "content": [
+                        {
+                            "type": "output_text",
+                            "text": self.output_text,
+                            "annotations": [
+                                {
+                                    "type": "url_citation",
+                                    "title": "Market report",
+                                    "url": "https://example.com/report",
+                                }
+                            ],
+                        }
+                    ],
+                }
+            ]
+        }
 
 
-def test_tavily_search_maps_structured_results() -> None:
-    async def handler(request: httpx.Request) -> httpx.Response:
-        assert request.headers["Authorization"] == "Bearer tvly-test"
-        payload = json.loads(request.content)
-        assert payload["query"] == "wireless earbuds trend"
-        assert payload["max_results"] == 2
-        return httpx.Response(
-            200,
-            json={
-                "results": [
-                    {
-                        "title": "Market report",
-                        "url": "https://example.com/report",
-                        "content": "Demand increased.",
-                        "score": 0.91,
-                    }
-                ]
-            },
-        )
+class FakeResponses:
+    kwargs = {}
 
-    async def run() -> WebSearchOutput:
-        transport = httpx.MockTransport(handler)
-        async with httpx.AsyncClient(transport=transport) as client:
-            return await _search_tavily(
-                "wireless earbuds trend",
-                max_results=2,
-                api_key="tvly-test",
-                base_url="https://api.tavily.com",
-                client=client,
-            )
+    async def create(self, **kwargs):
+        self.kwargs = kwargs
+        return FakeResponse()
 
-    result = asyncio.run(run())
+
+class FakeClient:
+    def __init__(self):
+        self.responses = FakeResponses()
+
+
+def test_openai_backend_uses_builtin_search_and_maps_citations() -> None:
+    client = FakeClient()
+    backend = OpenAIResponsesWebSearchBackend(client=client, model="gpt-5")
+    result: WebSearchOutput = asyncio.run(
+        backend.search("wireless earbuds trend", max_results=3)
+    )
+    assert client.responses.kwargs["tools"] == [{"type": "web_search"}]
     assert result.status == "ok"
     assert result.results[0].url == "https://example.com/report"
-    assert result.results[0].score == 0.91
+    assert result.results[0].content == "Demand for earbuds is growing."
 
 
-def test_web_search_without_key_returns_unavailable(monkeypatch) -> None:
-    monkeypatch.delenv("TAVILY_API_KEY", raising=False)
+def test_auto_backend_marks_deepseek_search_unavailable(monkeypatch) -> None:
+    monkeypatch.setenv("LLM_WEB_SEARCH_BACKEND", "auto")
+    monkeypatch.setenv("LLM_BASE_URL", "https://api.deepseek.com")
+    assert isinstance(get_web_search_backend(), UnavailableWebSearchBackend)
     result = asyncio.run(web_search.ainvoke({"query": "test"}))
     assert result.status == "unavailable"
-    assert result.results == []
-    assert "TAVILY_API_KEY" in (result.error or "")
+    assert "built-in web search" in (result.error or "")
+
+
+def test_auto_backend_selects_openai_responses(monkeypatch) -> None:
+    monkeypatch.setenv("LLM_WEB_SEARCH_BACKEND", "auto")
+    monkeypatch.setenv("LLM_BASE_URL", "https://api.openai.com/v1")
+    monkeypatch.setenv("LLM_API_KEY", "test-key")
+    monkeypatch.setenv("LLM_MODEL_NAME", "gpt-5")
+    assert isinstance(get_web_search_backend(), OpenAIResponsesWebSearchBackend)

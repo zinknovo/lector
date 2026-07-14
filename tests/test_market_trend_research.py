@@ -7,7 +7,7 @@ from app.tools.web_search import SearchResult, WebSearchOutput
 
 
 def test_market_trend_research_returns_structured_output(monkeypatch) -> None:
-    monkeypatch.delenv("TAVILY_API_KEY", raising=False)
+    monkeypatch.setenv("LLM_WEB_SEARCH_BACKEND", "none")
     result: MarketTrendOutput = asyncio.run(
         market_trend_research.ainvoke({"category": "wireless earbuds"})
     )
@@ -24,6 +24,7 @@ def test_market_trend_research_passes_source_attributed_evidence(monkeypatch) ->
         async def ainvoke(self, _payload):
             return WebSearchOutput(
                 query="earbuds",
+                provider="fake",
                 status="ok",
                 results=[
                     SearchResult(
@@ -47,4 +48,5 @@ def test_market_trend_research_passes_source_attributed_evidence(monkeypatch) ->
     monkeypatch.setattr(module, "web_search", FakeSearch())
     monkeypatch.setattr(module, "get_llm", lambda: fake_llm)
     asyncio.run(module.market_trend_research.ainvoke({"category": "earbuds"}))
+    assert fake_llm.messages is not None
     assert "URL: https://example.com/trend" in fake_llm.messages[1][1]
