@@ -8,7 +8,7 @@ from pydantic import BaseModel, Field
 from app.agent.item_search import Candidate
 from app.api.monitor import monitor
 from app.data import Product
-from app.recall.fx import to_base
+from app.tools.exchange_rate import exchange_rate
 
 
 class PricePoint(BaseModel):
@@ -83,10 +83,20 @@ async def price_compare(
     t0 = time.time()
 
     points: list[PricePoint] = []
+    rates: dict[str, float] = {base_currency.upper(): 1.0}
     for c in normalized:
         try:
-            price_base = to_base(c.price, c.currency, base_currency)
-        except ValueError:
+            currency = c.currency.upper()
+            if currency not in rates:
+                rate_result = await exchange_rate.ainvoke(
+                    {
+                        "source_currency": currency,
+                        "target_currency": base_currency.upper(),
+                    }
+                )
+                rates[currency] = rate_result.rate
+            price_base = c.price * rates[currency]
+        except (RuntimeError, ValueError):
             continue
         points.append(PricePoint(
             item_id=c.item_id,

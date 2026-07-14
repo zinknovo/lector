@@ -29,7 +29,10 @@ LLM_BASE_URL=
 APIFY_API_TOKEN=
 USE_MOCK=true
 MONGODB_URL=
+TAVILY_API_KEY=
 ```
+
+`TAVILY_API_KEY` 用于真实网页搜索。未配置时 `web_search` 返回明确的 `unavailable` 状态，趋势研究降级为数据不足，非同币种汇率不会使用模型猜测。`price_compare`、`exchange_rate` 和 `profit_calculator` 共用动态汇率结果及进程内缓存。
 
 ## 三阶段 Demo
 
