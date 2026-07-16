@@ -6,7 +6,7 @@
 
 **Architecture:** Docker Compose supplies MongoDB, OpenSearch and a BGE-M3 Query Tower. Python remains the internal Agent service and exposes generated files; a Java WebFlux gateway owns the public REST/WebSocket surface, API-key authentication, request throttling and proxying. A single smoke runner checks configured external capabilities without silently falling back to Mock.
 
-**Tech Stack:** Python 3.11+, FastAPI, Pydantic, PyMongo, OpenSearch, sentence-transformers with BAAI/bge-m3 (1024 dimensions), Docker Compose, Spring Boot 4.1, Java 17+, Maven, Apache POI, ReportLab.
+**Tech Stack:** Python 3.11+, FastAPI, Pydantic, PyMongo, Docker Compose, Spring Boot 4.1, Java 25 (LTS), Maven, Apache POI, ReportLab.
 
 ## Global Constraints
 
