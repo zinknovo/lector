@@ -1,8 +1,10 @@
 """按目的地 + 重量分档的卖家头程运费表（中国发往目标市场，CNY/件）。"""
 
+from app.recall.cost_tables import load_outbound_shipping_table
+
 # destination ISO → [(min_weight_kg, fee_cny, eta_days), ...]
 # 默认按海运/经济头程粗估，不是消费者国际快递。
-OUTBOUND_SHIPPING_TABLE: dict[str, list[tuple[float, float, int]]] = {
+OUTBOUND_SHIPPING_TABLE_DEFAULT: dict[str, list[tuple[float, float, int]]] = {
     "US": [(0, 18, 25), (0.5, 28, 22), (2.0, 55, 20)],
     "UK": [(0, 20, 28), (0.5, 32, 25), (2.0, 60, 22)],
     "DE": [(0, 20, 28), (0.5, 32, 25), (2.0, 60, 22)],
@@ -10,6 +12,11 @@ OUTBOUND_SHIPPING_TABLE: dict[str, list[tuple[float, float, int]]] = {
     # 保留 CN 仅作兼容；选品主路径不应默认发往中国
     "CN": [(0, 85, 12), (0.5, 130, 10), (2.0, 240, 8)],
 }
+
+# destination ISO → [(min_weight_kg, fee_cny, eta_days), ...]
+OUTBOUND_SHIPPING_TABLE: dict[str, list[tuple[float, float, int]]] = (
+    load_outbound_shipping_table(OUTBOUND_SHIPPING_TABLE_DEFAULT)
+)
 
 # 兼容旧调用：platform 名映射到目的地时不再使用；保留常量避免外部 import 断裂
 SHIPPING_TABLE = {

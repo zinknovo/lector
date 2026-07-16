@@ -25,6 +25,7 @@ def test_full_tool_set_registers_all_implemented_tools() -> None:
         "web_search",
         "market_trend_research",
         "product_scraper",
+        "market_price_search",
         "exchange_rate",
         "item_search",
         "category_insight",

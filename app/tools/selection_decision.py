@@ -124,6 +124,9 @@ async def selection_decision(
     roi: float | None = None,
     supplier_risk_score: float | None = None,
     supplier_risk_level: RiskLevel | None = None,
+    procurement_confidence: float | None = None,
+    revenue_evidence_confidence: float | None = None,
+    category_semantic_match: bool | None = None,
 ) -> SelectionDecision:
     """Aggregate existing market, profit, logistics and supplier evidence."""
     await monitor.report_tool_start("selection_decision", {"product_id": product_id})
@@ -175,6 +178,39 @@ async def selection_decision(
         recommendation = Recommendation.WATCH
         if missing_data:
             risks.append("关键决策数据不完整")
+
+    # --- Evidence quality gating (business accuracy) ---
+    # Downgrade REC to WATCH/REJECT when critical evidence is weak.
+    # Defaults are conservative but optional inputs keep backward compatibility.
+    PROCUREMENT_CONF_MIN = 0.55
+    REVENUE_EVIDENCE_CONF_MIN = 0.50
+    mismatch_downgrade_to = Recommendation.WATCH
+
+    # procurement confidence: prevents over-confident recommend when we only estimated purchase price.
+    if (
+        procurement_confidence is not None
+        and procurement_confidence < PROCUREMENT_CONF_MIN
+        and recommendation == Recommendation.RECOMMEND
+    ):
+        recommendation = Recommendation.WATCH
+        risks.append(f"采购价置信度低（{procurement_confidence:.2f} < {PROCUREMENT_CONF_MIN:.2f}）")
+
+    # revenue evidence confidence: prevents over-trusting web price extraction.
+    if (
+        revenue_evidence_confidence is not None
+        and revenue_evidence_confidence < REVENUE_EVIDENCE_CONF_MIN
+        and recommendation == Recommendation.RECOMMEND
+    ):
+        recommendation = Recommendation.WATCH
+        risks.append(
+            f"售价证据质量低（{revenue_evidence_confidence:.2f} < {REVENUE_EVIDENCE_CONF_MIN:.2f}）"
+        )
+
+    # category semantic mismatch: avoid "category downgrade" silently recommending.
+    if category_semantic_match is False and recommendation == Recommendation.RECOMMEND:
+        recommendation = mismatch_downgrade_to
+        risks.append("品类语义不匹配：目标类目与候选描述不一致")
+
     await monitor.report_tool_end(
         "selection_decision", int((time.time() - started_at) * 1000)
     )

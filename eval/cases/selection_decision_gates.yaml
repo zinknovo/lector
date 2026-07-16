@@ -1,0 +1,73 @@
+cases:
+  - id: low_procurement_confidence_downgrades_recommend_to_watch
+    inputs:
+      product_id: "A1"
+      title: "Strong Product"
+      platform: "amazon"
+      rating: 4.9
+      review_count: 10000
+      sales: 10000
+      selling_price_cny: 500
+      landed_cost_cny: 200
+      shipping_cost_cny: 20
+      eta_days: 10
+      total_cost_cny: 250
+      net_profit_cny: 250
+      profit_margin: 0.5
+      roi: 1.0
+      supplier_risk_score: 0.1
+      supplier_risk_level: "low"
+      procurement_confidence: 0.30
+      revenue_evidence_confidence: 0.90
+      category_semantic_match: true
+    expected:
+      recommendation: "watch"
+
+  - id: low_revenue_evidence_confidence_downgrades_recommend_to_watch
+    inputs:
+      product_id: "A2"
+      title: "Strong Product 2"
+      platform: "amazon"
+      rating: 4.9
+      review_count: 10000
+      sales: 10000
+      selling_price_cny: 500
+      landed_cost_cny: 200
+      shipping_cost_cny: 20
+      eta_days: 10
+      total_cost_cny: 250
+      net_profit_cny: 250
+      profit_margin: 0.5
+      roi: 1.0
+      supplier_risk_score: 0.1
+      supplier_risk_level: "low"
+      procurement_confidence: 0.90
+      revenue_evidence_confidence: 0.20
+      category_semantic_match: true
+    expected:
+      recommendation: "watch"
+
+  - id: category_semantic_mismatch_downgrades_recommend_to_watch
+    inputs:
+      product_id: "A3"
+      title: "Wrong Category Candidate"
+      platform: "amazon"
+      rating: 4.9
+      review_count: 10000
+      sales: 10000
+      selling_price_cny: 500
+      landed_cost_cny: 200
+      shipping_cost_cny: 20
+      eta_days: 10
+      total_cost_cny: 250
+      net_profit_cny: 250
+      profit_margin: 0.5
+      roi: 1.0
+      supplier_risk_score: 0.1
+      supplier_risk_level: "low"
+      procurement_confidence: 0.90
+      revenue_evidence_confidence: 0.90
+      category_semantic_match: false
+    expected:
+      recommendation: "watch"
+

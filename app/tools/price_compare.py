@@ -10,6 +10,7 @@ from app.agent.item_search import Candidate
 from app.api.monitor import monitor
 from app.data import Product
 from app.tools.exchange_rate import exchange_rate
+from app.tools.market_price_search import PriceEvidence
 
 
 class PricePoint(BaseModel):
@@ -59,9 +60,28 @@ def _extract_weight_kg(attributes: dict[str, object]) -> float | None:
     return value if value > 0 else None
 
 
-def _to_candidate(value: Candidate | Product) -> Candidate:
+def _to_candidate(
+    value: Candidate | Product | PriceEvidence,
+) -> Candidate:
     if isinstance(value, Candidate):
         return value
+    if isinstance(value, PriceEvidence):
+        # PriceEvidence doesn't carry a full SKU title/attributes; we keep title minimal
+        # for downstream tools that only need an ID and a currency-accurate price.
+        evidence_id = value.item_id or f"web_price_{abs(hash(value.source_url))}"
+        return Candidate(
+            item_id=evidence_id,
+            platform=value.platform,
+            title=value.source_name or "web_price_evidence",
+            price=float(value.price_local),
+            currency=str(value.currency_local).upper(),
+            rating=None,
+            review_count=None,
+            sales=None,
+            image_url=None,
+            seller=None,
+            attributes={},
+        )
     return Candidate(
         item_id=value.product_id,
         platform=value.platform,
@@ -79,7 +99,7 @@ def _to_candidate(value: Candidate | Product) -> Candidate:
 
 @tool
 async def price_compare(
-    candidates: list[Candidate | Product],
+    candidates: list[Candidate | Product | PriceEvidence],
     base_currency: str = "CNY",
     top_n: int = 12,
 ) -> PriceCompareOutput:

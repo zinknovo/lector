@@ -32,7 +32,8 @@ MONGODB_URL=
 LLM_WEB_SEARCH_BACKEND=auto
 ```
 
-`web_search` 通过统一接口调用当前模型端的内置搜索，不需要独立搜索供应商或额外密钥。`auto` 会为 OpenAI 官方端点绑定 Responses API 的 `web_search` 工具；DeepSeek 官方端点则复用同一个 Key，仅将搜索请求发送到 DeepSeek 的 Anthropic 兼容 Messages API，普通推理仍走现有 Chat Completions 接口。趋势研究、`price_compare`、`exchange_rate` 和 `profit_calculator` 共用搜索证据及进程内汇率缓存。
+`web_search` 通过统一接口调用当前模型端的内置搜索，不需要独立搜索供应商或额外密钥。`auto` 会为 OpenAI 官方端点绑定 Responses API 的 `web_search` 工具；DeepSeek 官方端点则复用同一个 Key，仅将搜索请求发送到 DeepSeek 的 Anthropic 兼容 Messages API，普通推理仍走现有 Chat Completions 接口。
+趋势研究、`market_price_search`、`price_compare`、`exchange_rate` 和 `profit_calculator` 共用搜索证据及进程内汇率缓存。
 
 启用 OpenAI 内置搜索时，沿用现有 LLM 配置：
 
@@ -60,6 +61,21 @@ uv run python scripts/demo_selection_pipeline.py
 ```
 
 Demo 使用 Mock 商品完成趋势发现、候选筛选、利润测算、供应商评估、统一决策和最终报告。
+
+## 业务准确性与评测交付
+
+为了让“选得好不好”更贴近跨境卖家的业务语义，系统在 `selection_decision` 做了证据质量门禁：
+
+- 当 `procurement_quote.confidence` 过低（采购价疑似估算）时，不会把结果直接升级到 `recommend`
+- 当 `market_price_search` 的售价证据质量过低时，不会直接 `recommend`
+- 当品类语义不匹配时，会强制降级（至少避免“品类不对但利润看起来不错”的误导）
+
+评测用例库位于 `eval/cases/selection_decision_gates.yaml`，可用下面命令运行：
+
+```bash
+uv run python scripts/run_eval.py
+uv run pytest tests/test_eval_harness.py -q
+```
 
 ## API Server
 
@@ -93,6 +109,12 @@ cp .env.example .env
 # 至少设置 LLM_API_KEY；真实 Amazon 搜索还需设置 APIFY_API_TOKEN，并将 USE_MOCK=false
 docker compose up --build
 ```
+
+成本模型说明：
+
+- 头程/税率分档由 `shipping_calc` 使用：`app/recall/shipping.py` + `app/recall/duty.py`
+- 默认表写在 `data/cost_tables.json`
+- 可通过 `LECTOR_COST_TABLES_PATH=/path/to/cost_tables.json` 覆盖（例如你们后续扩展到 CA/UK/EU 等目的地时）
 
 服务入口：前端 `http://127.0.0.1:5173`，Java 网关 `http://127.0.0.1:8080`，
 内部 Python Agent `http://127.0.0.1:8000`。MongoDB 由 Compose 启动，同时存储

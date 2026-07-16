@@ -9,6 +9,15 @@ from app.api.monitor import monitor
 from app.tools.exchange_rate import exchange_rate
 
 
+DEFAULT_PLATFORM_FEE_RATES: dict[str, float] = {
+    # coarse defaults; can be tuned later with real fee tables
+    "amazon": 0.15,
+    "ebay": 0.12,
+    "walmart": 0.13,
+    "aliexpress": 0.10,
+}
+
+
 class ProfitCalcOutput(BaseModel):
     selling_price_cny: float
     procurement_cost_cny: float
@@ -36,11 +45,27 @@ async def profit_calculator(
     selling_currency: str = "CNY",
     procurement_currency: str = "CNY",
     shipping_currency: str = "CNY",
-    platform_fee_rate: float = 0.15,
+    selling_platform: str | None = None,
+    source_platform: str | None = None,
+    platform_fee_rate: float | None = None,
     target_margin: float = 0.3,
 ) -> ProfitCalcOutput:
     """Calculate SKU profitability after converting all monetary inputs to CNY."""
-    await monitor.report_tool_start("profit_calculator", {"selling_price": selling_price})
+    if platform_fee_rate is None:
+        basis_platform = selling_platform or source_platform or "amazon"
+        platform_fee_rate = DEFAULT_PLATFORM_FEE_RATES.get(
+            basis_platform.lower(), 0.15
+        )
+    platform_fee_rate = max(0.0, min(float(platform_fee_rate), 0.5))
+
+    await monitor.report_tool_start(
+        "profit_calculator",
+        {
+            "selling_price": selling_price,
+            "selling_platform": selling_platform,
+            "source_platform": source_platform,
+        },
+    )
     started_at = time.time()
     selling_cny = selling_price * await _rate_to_cny(selling_currency)
     procurement_cny = procurement_cost * await _rate_to_cny(procurement_currency)
