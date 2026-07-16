@@ -1,5 +1,5 @@
-ARG MAVEN_IMAGE=public.ecr.aws/docker/library/maven:3.9-eclipse-temurin-21
-ARG JRE_IMAGE=public.ecr.aws/docker/library/eclipse-temurin:21-jre
+ARG MAVEN_IMAGE=public.ecr.aws/docker/library/maven:3.9-eclipse-temurin-25
+ARG JRE_IMAGE=public.ecr.aws/docker/library/eclipse-temurin:25-jre
 FROM ${MAVEN_IMAGE} AS build
 WORKDIR /workspace
 COPY lector-api/pom.xml /workspace/pom.xml

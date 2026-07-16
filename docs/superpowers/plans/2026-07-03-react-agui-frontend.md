@@ -1,6 +1,6 @@
 # React AGUI Frontend Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** Build the tutorial React client that starts Globex tasks, consumes AGUI events, cancels work, and renders the final shopping answer.
 
@@ -19,9 +19,9 @@
 - Create: `frontend/index.html`
 - Create: `frontend/src/types.ts`
 
-- [ ] Configure Vite, Vitest, TypeScript and `/api` + `/ws` proxies.
-- [ ] Define `AguiEvent`, task response and hook state types matching the backend wire format.
-- [ ] Install dependencies with `pnpm --dir frontend install`.
+- [x] Configure Vite, Vitest, TypeScript and `/api` + `/ws` proxies.
+- [x] Define `AguiEvent`, task response and hook state types matching the backend wire format.
+- [x] Install dependencies with `pnpm --dir frontend install`.
 
 ### Task 2: Task lifecycle hook
 
@@ -30,10 +30,10 @@
 - Create: `frontend/src/hooks/useGlobexTask.ts`
 - Create: `frontend/src/test/setup.ts`
 
-- [ ] Write failing tests for task creation, AGUI result/error handling, cancellation and cleanup.
-- [ ] Run `pnpm --dir frontend test -- useGlobexTask`; expect missing-module failures.
-- [ ] Implement the hook with one active socket, bounded reconnect backoff and safe payload parsing.
-- [ ] Re-run the focused tests; expect all pass.
+- [x] Write failing tests for task creation, AGUI result/error handling, cancellation and cleanup.
+- [x] Run `pnpm --dir frontend test -- useGlobexTask`; expect missing-module failures.
+- [x] Implement the hook with one active socket, bounded reconnect backoff and safe payload parsing.
+- [x] Re-run the focused tests; expect all pass.
 
 ### Task 3: Event stream component
 
@@ -41,10 +41,10 @@
 - Create: `frontend/src/components/EventStream.test.tsx`
 - Create: `frontend/src/components/EventStream.tsx`
 
-- [ ] Write failing tests for labels, fork demands, tool duration and unknown events.
-- [ ] Run focused tests; expect missing-module failures.
-- [ ] Implement typed event rendering without unsafe HTML.
-- [ ] Re-run focused tests; expect all pass.
+- [x] Write failing tests for labels, fork demands, tool duration and unknown events.
+- [x] Run focused tests; expect missing-module failures.
+- [x] Implement typed event rendering without unsafe HTML.
+- [x] Re-run focused tests; expect all pass.
 
 ### Task 4: Application shell
 
@@ -54,10 +54,10 @@
 - Create: `frontend/src/main.tsx`
 - Create: `frontend/src/styles.css`
 
-- [ ] Write failing tests for empty-submit prevention, send/cancel states and Markdown output.
-- [ ] Run focused tests; expect missing-module failures.
-- [ ] Implement the tutorial page and responsive minimal styling.
-- [ ] Re-run focused tests; expect all pass.
+- [x] Write failing tests for empty-submit prevention, send/cancel states and Markdown output.
+- [x] Run focused tests; expect missing-module failures.
+- [x] Implement the tutorial page and responsive minimal styling.
+- [x] Re-run focused tests; expect all pass.
 
 ### Task 5: Documentation and verification
 
@@ -65,11 +65,11 @@
 - Modify: `README.md`
 - Modify: `.gitignore`
 
-- [ ] Document frontend install/dev/test/build commands and two-terminal startup.
-- [ ] Run `pnpm --dir frontend test -- --run`; require zero failures.
-- [ ] Run `pnpm --dir frontend build`; require a successful TypeScript/Vite build.
-- [ ] Run backend `pytest` and `basedpyright` to detect regressions.
-- [ ] Start the frontend locally, inspect it in Chrome, then stop servers and remove temporary outputs.
+- [x] Document frontend install/dev/test/build commands and two-terminal startup.
+- [x] Run `pnpm --dir frontend test -- --run`; require zero failures.
+- [x] Run `pnpm --dir frontend build`; require a successful TypeScript/Vite build.
+- [x] Run backend `pytest` and `basedpyright` to detect regressions.
+- [x] Start the frontend locally, inspect it in Chrome, then stop servers and remove temporary outputs.
 
 ## Self-review
 

@@ -1,6 +1,6 @@
 # DeepSeek Native Web Search Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** Make Lector's existing `web_search` tool use DeepSeek's native server-side web search through the DeepSeek Anthropic-compatible Messages API.
 
@@ -30,7 +30,7 @@
 - Consumes: `SearchResult`, `WebSearchOutput`, `BuiltInWebSearchBackend`.
 - Produces: `DeepSeekAnthropicWebSearchBackend(client, model, api_key, base_url)` implementing `search(query, max_results)`.
 
-- [ ] **Step 1: Write failing adapter tests**
+- [x] **Step 1: Write failing adapter tests**
 
 Add an `httpx.MockTransport` fixture and tests that specify the complete request and response mapping:
 
@@ -89,13 +89,13 @@ def test_deepseek_backend_redacts_http_failure() -> None:
     # Assert status=unavailable, error contains "HTTP 401", and excludes the response body and API key.
 ```
 
-- [ ] **Step 2: Run tests and verify the adapter is missing**
+- [x] **Step 2: Run tests and verify the adapter is missing**
 
 Run: `uv run pytest tests/test_web_search.py -q`
 
 Expected: collection fails because `DeepSeekAnthropicWebSearchBackend` is not defined.
 
-- [ ] **Step 3: Implement request, continuation, and parsing**
+- [x] **Step 3: Implement request, continuation, and parsing**
 
 In `app/tools/web_search.py`, import `httpx` and implement:
 
@@ -121,7 +121,7 @@ Use an injected client without closing it. When no client is injected, create an
 
 Only accept dictionary content blocks. Ignore error blocks, empty URLs, `encrypted_content`, and malformed entries. If no URL remains, return unavailable with `DeepSeek web search returned no URL results`.
 
-- [ ] **Step 4: Run focused and full tests**
+- [x] **Step 4: Run focused and full tests**
 
 Run: `uv run pytest tests/test_web_search.py -q`
 
@@ -131,7 +131,7 @@ Run: `uv run pytest -q`
 
 Expected: full suite passes.
 
-- [ ] **Step 5: Commit the adapter**
+- [x] **Step 5: Commit the adapter**
 
 ```bash
 git add app/tools/web_search.py tests/test_web_search.py
@@ -153,7 +153,7 @@ git commit -m "feat: add DeepSeek native web search backend"
 - Consumes: `DeepSeekAnthropicWebSearchBackend` from Task 1.
 - Produces: factory modes `auto|openai_responses|deepseek_anthropic|none` and readiness behavior consistent with the factory.
 
-- [ ] **Step 1: Write failing factory and readiness tests**
+- [x] **Step 1: Write failing factory and readiness tests**
 
 Replace the old unavailable assertion with:
 
@@ -171,13 +171,13 @@ def test_auto_backend_selects_deepseek_anthropic(monkeypatch) -> None:
 
 Also assert explicit `deepseek_anthropic` works with a proxy LLM base URL and honors `DEEPSEEK_ANTHROPIC_BASE_URL`. In readiness tests, patch `web_search.ainvoke` to return an OK result and assert `_check_web_search()` does not skip when `LLM_WEB_SEARCH_BACKEND=auto` and the base URL is DeepSeek.
 
-- [ ] **Step 2: Run tests and verify old routing fails**
+- [x] **Step 2: Run tests and verify old routing fails**
 
 Run: `uv run pytest tests/test_web_search.py tests/test_readiness.py -q`
 
 Expected: DeepSeek auto-routing and readiness tests fail because auto still maps DeepSeek to none.
 
-- [ ] **Step 3: Implement routing and readiness**
+- [x] **Step 3: Implement routing and readiness**
 
 Update `get_web_search_backend()`:
 
@@ -195,13 +195,13 @@ For the DeepSeek branch, require `LLM_API_KEY`, reuse `LLM_MODEL_NAME` with defa
 
 Update `_check_web_search()` so auto considers both official OpenAI and DeepSeek endpoints configured; explicit `none` still skips, runtime unavailable still fails.
 
-- [ ] **Step 4: Update active documentation and configuration**
+- [x] **Step 4: Update active documentation and configuration**
 
 - Add `DEEPSEEK_ANTHROPIC_BASE_URL=https://api.deepseek.com/anthropic` to `.env.example` as an optional override.
 - Replace README text saying DeepSeek built-in search is unavailable with the two-protocol routing explanation.
 - Update production readiness docs to list DeepSeek auto support and the same-key behavior.
 
-- [ ] **Step 5: Run focused/full verification and commit**
+- [x] **Step 5: Run focused/full verification and commit**
 
 Run: `uv run pytest tests/test_web_search.py tests/test_readiness.py tests/test_market_trend_research.py tests/test_exchange_rate.py -q`
 
@@ -227,7 +227,7 @@ git commit -m "feat: route DeepSeek through native web search"
 - Consumes: final backend and current ignored `.env` DeepSeek credentials.
 - Produces: evidence that the real endpoint returns at least one cited URL without exposing secrets.
 
-- [ ] **Step 1: Run a live smoke through the public tool**
+- [x] **Step 1: Run a live smoke through the public tool**
 
 Run a short Python expression that loads `.env`, invokes:
 
@@ -243,7 +243,7 @@ print(result.provider, len(result.results), [item.url for item in result.results
 
 Expected: provider `deepseek_anthropic`, one or two HTTP URLs, no key or full content printed.
 
-- [ ] **Step 2: Run complete local verification**
+- [x] **Step 2: Run complete local verification**
 
 Run separately:
 
@@ -258,6 +258,6 @@ docker compose ps
 
 Expected: Python tests and type checking pass, demo exits 0, and exactly MongoDB/Agent/Gateway/Frontend are running.
 
-- [ ] **Step 3: Inspect and deliver**
+- [x] **Step 3: Inspect and deliver**
 
 Run `rtk git diff --check`, inspect `main...HEAD`, confirm `.idea` is absent from commits, merge to `main`, re-run Python tests on merged `main`, remove the owned worktree, delete the feature branch, and push `main` to `origin`.

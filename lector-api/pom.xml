@@ -15,7 +15,7 @@
     <name>lector-api</name>
     <description>Lector public gateway for the internal Python Agent service</description>
     <properties>
-        <java.version>17</java.version>
+        <java.version>25</java.version>
         <bucket4j.version>8.18.0</bucket4j.version>
     </properties>
     <dependencies>

@@ -1,6 +1,6 @@
 # Mongo Category Knowledge Store Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** Replace the Tower/OpenSearch category-knowledge path with an asynchronous MongoDB-backed store while preserving the `category_insight` tool contract.
 
@@ -32,7 +32,7 @@
 - Consumes: `CategoryCard`, `normalize_category()`, `MONGODB_URL`.
 - Produces: `CategoryKnowledgeStore.search()`, `CategoryKnowledgeStore.upsert_many()`, `MongoCategoryKnowledgeStore`, `get_category_knowledge_store()`.
 
-- [ ] **Step 1: Write failing store tests**
+- [x] **Step 1: Write failing store tests**
 
 Create a fake collection/cursor in `tests/test_category_store.py` and assert the exact Mongo filter, sort order, limit, category normalization, model conversion, index definitions, and normalized upserts:
 
@@ -76,13 +76,13 @@ def test_upsert_many_creates_indexes_and_normalizes_documents() -> None:
     assert collection.replacements[0][1]["category"] == "wireless earbuds"
 ```
 
-- [ ] **Step 2: Run tests and verify the module is missing**
+- [x] **Step 2: Run tests and verify the module is missing**
 
 Run: `uv run pytest tests/test_category_store.py -q`
 
 Expected: collection fails with `ModuleNotFoundError: app.recall.category_store`.
 
-- [ ] **Step 3: Implement the protocol and Mongo store**
+- [x] **Step 3: Implement the protocol and Mongo store**
 
 Create `app/recall/category_store.py` with these concrete signatures and behaviors:
 
@@ -134,13 +134,13 @@ Implementation requirements:
 - Sort `card_types` before placing them in `$in` for deterministic tests.
 - Expose an `@lru_cache(maxsize=1)` factory named `get_category_knowledge_store()`.
 
-- [ ] **Step 4: Run store tests**
+- [x] **Step 4: Run store tests**
 
 Run: `uv run pytest tests/test_category_store.py -q`
 
 Expected: all tests pass.
 
-- [ ] **Step 5: Run the full Python suite and commit**
+- [x] **Step 5: Run the full Python suite and commit**
 
 Run: `uv run pytest -q`
 
@@ -163,7 +163,7 @@ git commit -m "feat: add Mongo category knowledge store"
 - Consumes: `CategoryKnowledgeStore.search()` and `get_category_knowledge_store()` from Task 1.
 - Produces: `_recall_cards(category, top_k, store=None)` with no Tower/OpenSearch imports.
 
-- [ ] **Step 1: Write failing tool tests**
+- [x] **Step 1: Write failing tool tests**
 
 Add an async fake store and cover recall, depth filtering, empty results, and error reporting:
 
@@ -207,13 +207,13 @@ def test_category_insight_reports_and_reraises_store_error(monkeypatch) -> None:
     module.monitor.report_error.assert_awaited_once()
 ```
 
-- [ ] **Step 2: Run tests and verify old imports prevent isolation**
+- [x] **Step 2: Run tests and verify old imports prevent isolation**
 
 Run: `uv run pytest tests/test_category_insight.py -q`
 
 Expected: fail because `category_insight` still imports and constructs OpenSearch/Tower resources.
 
-- [ ] **Step 3: Replace hybrid recall with store lookup**
+- [x] **Step 3: Replace hybrid recall with store lookup**
 
 In `app/tools/category_insight.py`:
 
@@ -234,7 +234,7 @@ async def _recall_cards(
 - Wrap recall and output aggregation in `try/except Exception as exc`; on failure call `await monitor.report_error(type(exc).__name__, f"category_insight failed: {exc}")` and re-raise.
 - Preserve existing `report_tool_start`, successful `report_tool_end`, parsers, depth limits, confidence calculation, signature, and output model.
 
-- [ ] **Step 4: Run focused and full tests**
+- [x] **Step 4: Run focused and full tests**
 
 Run: `uv run pytest tests/test_category_insight.py tests/test_tool_registry.py tests/test_item_picker.py -q`
 
@@ -244,7 +244,7 @@ Run: `uv run pytest -q`
 
 Expected: all current tests pass except tests intentionally tied to the old builder/config, which Task 3 and Task 4 replace.
 
-- [ ] **Step 5: Commit the tool migration**
+- [x] **Step 5: Commit the tool migration**
 
 ```bash
 git add app/tools/category_insight.py tests/test_category_insight.py
@@ -264,7 +264,7 @@ git commit -m "refactor: read category insights from Mongo store"
 - Consumes: `CategoryKnowledgeStore.upsert_many()` and `MongoCategoryKnowledgeStore`.
 - Produces: `BuildCategoryKbResult(read, written, rejected)` and `build_category_kb(cards_path, store)`.
 
-- [ ] **Step 1: Rewrite builder tests first**
+- [x] **Step 1: Rewrite builder tests first**
 
 Replace OpenSearch and embedding fakes with a store fake:
 
@@ -297,13 +297,13 @@ def test_builder_batches_all_accepted_cards_into_one_upsert(tmp_path: Path) -> N
 
 Update `tests/test_cli_entrypoints.py` to remove `scripts/setup_pipeline.py` and retain `scripts/build_category_kb.py`.
 
-- [ ] **Step 2: Run builder tests and verify they fail against the old API**
+- [x] **Step 2: Run builder tests and verify they fail against the old API**
 
 Run: `uv run pytest tests/test_category_kb_builder.py tests/test_cli_entrypoints.py -q`
 
 Expected: failures reference the old `client`/`encode` signature or OpenSearch constants.
 
-- [ ] **Step 3: Implement the importer**
+- [x] **Step 3: Implement the importer**
 
 Rewrite `scripts/build_category_kb.py` so it:
 
@@ -327,7 +327,7 @@ async def build_category_kb(
 
 `main()` must instantiate `MongoCategoryKnowledgeStore()`, keep `--cards-path`, run the async builder, and print JSON. Remove all OpenSearch, vector dimension, embedding and index mapping code.
 
-- [ ] **Step 4: Delete obsolete pipeline setup and run tests**
+- [x] **Step 4: Delete obsolete pipeline setup and run tests**
 
 Delete `scripts/setup_pipeline.py` and `scripts/setup_pipeline.sh`.
 
@@ -339,7 +339,7 @@ Run: `uv run pytest -q`
 
 Expected: all remaining tests pass except the explicitly obsolete OpenSearch/readiness tests removed in Task 4.
 
-- [ ] **Step 5: Commit the importer**
+- [x] **Step 5: Commit the importer**
 
 ```bash
 git add scripts/build_category_kb.py scripts/setup_pipeline.py scripts/setup_pipeline.sh tests/test_category_kb_builder.py tests/test_cli_entrypoints.py
@@ -368,7 +368,7 @@ git commit -m "refactor: import category cards into MongoDB"
 - Consumes: the Mongo-only category path from Tasks 1-3.
 - Produces: readiness set `{apify, mongodb, llm, web_search}` and four-service Compose stack.
 
-- [ ] **Step 1: Change configuration/readiness tests first**
+- [x] **Step 1: Change configuration/readiness tests first**
 
 In `tests/test_readiness.py`, delete Tower imports and vector/Tower tests, then add:
 
@@ -387,20 +387,20 @@ assert set(config.get("volumes", {})) == {"mongodb-data"}
 assert set(config["services"]["agent"]["depends_on"]) == {"mongodb"}
 ```
 
-- [ ] **Step 2: Run tests and verify removed services are still present**
+- [x] **Step 2: Run tests and verify removed services are still present**
 
 Run: `uv run pytest tests/test_readiness.py tests/test_compose_config.py -q`
 
 Expected: assertions fail because OpenSearch/Tower are still configured.
 
-- [ ] **Step 3: Remove Python runtime paths and service files**
+- [x] **Step 3: Remove Python runtime paths and service files**
 
 - Delete `_validate_vector`, `_check_opensearch`, `_check_tower` and their unused imports from readiness.
 - Change `ALL_SERVICES` in `scripts/smoke_external_services.py` to `{"apify", "mongodb", "llm", "web_search"}` and remove OpenSearch password redaction.
 - Delete `app/recall/opensearch_config.py`, `app/recall/towers.py`, `tests/test_opensearch_config.py`, and the entire `services/tower` tree.
 - Run `rtk proxy rg -n 'opensearch|tower|TOWER_|OPENSEARCH_' app scripts tests services pyproject.toml` and remove every runtime reference; prompt prose describing abstract retrieval is allowed only when it does not name a removed service.
 
-- [ ] **Step 4: Simplify Compose and dependencies**
+- [x] **Step 4: Simplify Compose and dependencies**
 
 In `compose.yaml`:
 
@@ -416,7 +416,7 @@ Run: `uv lock`
 
 Expected: exit 0 and OpenSearch transport dependencies are removed when no longer needed.
 
-- [ ] **Step 5: Run focused and full tests, then commit**
+- [x] **Step 5: Run focused and full tests, then commit**
 
 Run: `uv run pytest tests/test_readiness.py tests/test_compose_config.py tests/test_cli_entrypoints.py -q`
 
@@ -449,7 +449,7 @@ git commit -m "chore: remove Tower and OpenSearch runtime"
 - Consumes: final Mongo store/importer and simplified Compose stack.
 - Produces: accurate setup instructions and verified runnable demo/deployment configuration.
 
-- [ ] **Step 1: Add a documentation/reference regression check**
+- [x] **Step 1: Add a documentation/reference regression check**
 
 Run the stale-reference scan before edits:
 
@@ -459,7 +459,7 @@ rtk proxy rg -n 'OpenSearch|Tower|OPENSEARCH_|TOWER_|setup_pipeline' README.md d
 
 Expected: active-runtime references are reported in README, production docs, and demo/config files.
 
-- [ ] **Step 2: Update user-facing instructions**
+- [x] **Step 2: Update user-facing instructions**
 
 - Describe `category_cards` as MongoDB-backed structured knowledge.
 - Document `uv run python scripts/build_category_kb.py --cards-path data/category_cards.jsonl`.
@@ -468,7 +468,7 @@ Expected: active-runtime references are reported in README, production docs, and
 - Remove Tower environment setup from `scripts/demo_selection_pipeline.py`.
 - Preserve historical design/plan documents; they are records, not active runtime documentation.
 
-- [ ] **Step 3: Verify no stale active-runtime references remain**
+- [x] **Step 3: Verify no stale active-runtime references remain**
 
 Run:
 
@@ -478,7 +478,7 @@ rtk proxy rg -n 'OpenSearch|Tower|OPENSEARCH_|TOWER_|setup_pipeline' README.md d
 
 Expected: no matches.
 
-- [ ] **Step 4: Run complete verification**
+- [x] **Step 4: Run complete verification**
 
 Run each command separately and require exit code 0:
 
@@ -508,7 +508,7 @@ Run any existing frontend, Java Gateway, and Tower-independent service suites do
 
 Expected: both commands exit 0.
 
-- [ ] **Step 5: Inspect final diff and commit**
+- [x] **Step 5: Inspect final diff and commit**
 
 Run:
 
