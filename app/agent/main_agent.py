@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+import os
 from typing import Any
 
 from langgraph.prebuilt import create_react_agent
@@ -16,8 +17,9 @@ from app.memory.store import store
 from app.utils.path_utils import ensure_session_dir
 
 
-MAIN_AGENT_MAX_ITERATIONS = 30
-MAIN_AGENT_TIMEOUT_SEC = 300
+MAIN_AGENT_MAX_ITERATIONS = 45
+# 真实链路含 Apify + DeepSeek web_search，单次搜索常 30–60s；默认放宽到 10 分钟
+MAIN_AGENT_TIMEOUT_SEC = int(os.environ.get("MAIN_AGENT_TIMEOUT_SEC", "600"))
 
 
 def _build_main_agent(prompt: str):

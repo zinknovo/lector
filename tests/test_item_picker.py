@@ -62,9 +62,9 @@ def test_score_combines_price_shipping_duty_and_product_metrics() -> None:
 
     assert score == 0.8
     assert len(reasons) == 3
-    assert reasons[0].startswith("到手价 199.0 落在中档")
-    assert reasons[1] == "10 天到手"
-    assert reasons[2] == "跨境直邮免税"
+    assert reasons[0].startswith("头程成本 199.0 落在预算带")
+    assert reasons[1] == "头程约 10 天"
+    assert reasons[2] == "目标市场进口税较低"
 
 
 def test_item_picker_filters_sorts_and_limits_results() -> None:

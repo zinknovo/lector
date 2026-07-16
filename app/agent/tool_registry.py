@@ -10,6 +10,7 @@ from app.tools.market_trend_research import market_trend_research
 from app.tools.planner import planner
 from app.tools.price_compare import price_compare
 from app.tools.product_scraper import product_scraper
+from app.tools.procurement_quote import procurement_quote
 from app.tools.profit_calculator import profit_calculator
 from app.tools.shipping_calc import shipping_calc
 from app.tools.shopping_summary import shopping_summary
@@ -30,6 +31,7 @@ FULL_TOOL_SET = [
     item_picker,
     price_compare,
     shipping_calc,
+    procurement_quote,
     profit_calculator,
     supplier_evaluator,
     selection_decision,

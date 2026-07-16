@@ -38,7 +38,7 @@ describe("App", () => {
     const send = screen.getByRole("button", { name: "发送" });
 
     expect(send).toBeDisabled();
-    await user.type(screen.getByLabelText("购物需求"), "旅行收纳三件套");
+    await user.type(screen.getByLabelText("选品需求"), "旅行收纳三件套");
     expect(send).toBeEnabled();
     await user.click(send);
 
@@ -60,7 +60,7 @@ describe("App", () => {
     render(<App />);
 
     expect(screen.getByRole("button", { name: "取消任务" })).toBeInTheDocument();
-    expect(screen.getByLabelText("购物需求")).toBeDisabled();
+    expect(screen.getByLabelText("选品需求")).toBeDisabled();
     await user.click(screen.getByRole("button", { name: "取消任务" }));
 
     expect(mocks.cancelTask).toHaveBeenCalledOnce();

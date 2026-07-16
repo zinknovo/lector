@@ -18,10 +18,14 @@ def test_system_prompt_contains_terminal_and_loop_guardrails() -> None:
     assert "filter" in prompt
     assert "full_chain" in prompt
     assert "profit_calculator" in prompt
+    assert "procurement_quote" in prompt
     assert "supplier_evaluator" in prompt
     assert "selection_decision" in prompt
     assert "SelectionDecision" in prompt
     assert "Globex" not in prompt
+    assert "中国货源" in prompt
+    assert "destination=US" in prompt
+    assert "海淘代购" in prompt
 
 
 def test_selection_prompts_prohibit_invented_metrics() -> None:

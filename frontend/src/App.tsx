@@ -25,20 +25,20 @@ export default function App() {
   return (
     <main className="app-shell">
       <header className="hero">
-        <p className="eyebrow">AGENTIC COMMERCE</p>
-        <h1>Globex 跨境购物 Agent</h1>
+        <p className="eyebrow">LECTOR</p>
+        <h1>Lector 电商选品 Agent</h1>
         <p className="hero-copy">
-          描述预算、材质和风格偏好，实时查看 Agent 的检索、分派与筛选过程。
+          描述目标市场与品类；默认中国货源卖海外站，实时查看发现、筛选与决策全链路。
         </p>
       </header>
 
       <form className="query-panel" onSubmit={submit}>
-        <label htmlFor="shopping-query">购物需求</label>
+        <label htmlFor="shopping-query">选品需求</label>
         <textarea
           id="shopping-query"
           value={query}
           onChange={(event) => setQuery(event.target.value)}
-          placeholder="例如：想买便宜又抗造的旅行三件套，预算 300，不要塑料，偏好小众设计"
+          placeholder="例如：美国站卖紫砂保温杯，中国货源，目标毛利 30%，给出 Top 候选与建议"
           disabled={running}
           rows={4}
         />
@@ -76,7 +76,7 @@ export default function App() {
           <div className="section-heading">
             <div>
               <p className="section-kicker">RESULT</p>
-              <h2>购物清单</h2>
+              <h2>选品报告</h2>
             </div>
           </div>
           <div className="markdown-body">

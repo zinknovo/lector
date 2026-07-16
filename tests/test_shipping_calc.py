@@ -47,4 +47,11 @@ def test_shipping_calc_uses_forwarded_product_weight() -> None:
     )
 
     assert result.items[0].weight_kg == 0.2
-    assert result.items[0].shipping_cny == 85
+    # 0.2kg → US 头程最低档
+    assert result.items[0].shipping_cny == 18
+    assert result.destination == "US"
+    # landed = 运费 + 关税，不含售价
+    declared = round(70 * 0.28, 2)
+    duty = round(declared * 0.08, 2)
+    assert result.items[0].duty_cny == duty
+    assert result.items[0].landed_cny == round(18 + duty, 2)

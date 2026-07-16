@@ -14,6 +14,7 @@ from app.agent.item_search import item_search
 from app.tools.item_picker import item_picker
 from app.tools.market_trend_research import market_trend_research
 from app.tools.price_compare import price_compare
+from app.tools.procurement_quote import procurement_quote
 from app.tools.profit_calculator import profit_calculator
 from app.tools.shipping_calc import shipping_calc
 from app.tools.shopping_summary import shopping_summary
@@ -35,7 +36,7 @@ async def main() -> None:
         {"candidates": [c.model_dump() for c in search_result.candidates], "top_n": 3}
     )
     landed = await shipping_calc.ainvoke(
-        {"points": [p.model_dump() for p in compare.ranked], "destination": "CN"}
+        {"points": [p.model_dump() for p in compare.ranked], "destination": "US"}
     )
     picks = await item_picker.ainvoke(
         {"landed": [item.model_dump() for item in landed.items], "top_n": 2}
@@ -51,10 +52,26 @@ async def main() -> None:
     for pick in picks.picks:
         candidate = candidate_by_id[pick.item_id]
         landed_item = landed_by_id[pick.item_id]
+        quote = await procurement_quote.ainvoke(
+            {
+                "product_query": candidate.title,
+                "amazon_price_cny": candidate.price
+                if candidate.currency == "CNY"
+                else None,
+                "amazon_price_usd": candidate.price
+                if candidate.currency == "USD"
+                else None,
+            }
+        )
+        if quote.procurement_cost_cny is None:
+            raise RuntimeError(f"no procurement quote for {candidate.item_id}")
         profit = await profit_calculator.ainvoke(
             {
-                "selling_price": round(pick.landed_cny * 1.8, 2),
-                "procurement_cost": pick.landed_cny,
+                "selling_price": candidate.price,
+                "selling_currency": candidate.currency,
+                "procurement_cost": quote.procurement_cost_cny,
+                "procurement_currency": "CNY",
+                "shipping_cost": landed_item.shipping_cny,
                 "platform_fee_rate": 0.15,
             }
         )
@@ -86,7 +103,8 @@ async def main() -> None:
         )
         decisions.append(decision)
         print(
-            f"{decision.product_id}: recommendation={decision.recommendation.value}, "
+            f"{decision.product_id}: quote={quote.procurement_cost_cny} "
+            f"({quote.source}) recommendation={decision.recommendation.value}, "
             f"score={decision.overall_score:.2f}, confidence={decision.confidence:.2f}, "
             f"margin={decision.profit_margin:.2%}"
         )

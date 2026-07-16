@@ -132,7 +132,7 @@ export function useGlobexTask() {
     async (query: string, userId?: string) => {
       const trimmedQuery = query.trim();
       if (!trimmedQuery) {
-        setError("请输入购物需求");
+        setError("请输入选品需求");
         return;
       }
 

@@ -1,4 +1,4 @@
-"""运费 + 关税估算工具。"""
+"""卖家头程运费 + 进口税参考（中国货源 → 目标销售市场）。"""
 
 import time
 from typing import Literal
@@ -13,15 +13,15 @@ from app.tools.price_compare import PricePoint
 
 
 class LandedCost(BaseModel):
-    """单件商品的到手成本。"""
+    """单件候选的售价参考 + 中国发往目标市场的头程成本。"""
 
     item_id: str
     platform: str
-    price_cny: float
-    shipping_cny: float
-    duty_cny: float
-    landed_cny: float  # 到手价 = 商品 + 运费 + 关税
-    eta_days: int  # 物流时效预估
+    price_cny: float  # 目标市场售价（归一 CNY），不是采购成本
+    shipping_cny: float  # 中国 → 目标市场头程运费
+    duty_cny: float  # 进口税参考（按估算货值）
+    landed_cny: float  # 头程综合成本 = 运费 + 关税（不含采购、不含售价）
+    eta_days: int
     duty_tier: Literal["免征", "标准", "高税"]
     rating: float | None = None
     review_count: int | None = None
@@ -35,50 +35,63 @@ class ShippingCalcOutput(BaseModel):
 
 
 def _weight_kg(point: PricePoint) -> float:
-    """Use normalized product weight, with a conservative MVP fallback."""
     return point.weight_kg if point.weight_kg is not None else 0.5
 
 
 @tool
 async def shipping_calc(
     points: list[PricePoint],
-    destination: str = "CN",
+    destination: str = "US",
+    declared_value_ratio: float = 0.28,
 ) -> ShippingCalcOutput:
-    """为已比价的候选估算到手价（含国际运费 + 综合税）。
+    """估算中国货源发往目标销售市场的头程运费与进口税参考。
 
-    Args:
-        points: 来自 PriceCompare.ranked 的子集（建议直接传 ranked，不超过 30 件）。
-        destination: 收货国家 ISO 码，默认中国大陆。
+    业务方向是「中国卖全球」（如 Amazon 美国站），不是「从 Amazon 买回中国」。
+    - points.price_cny：目标市场售价参考
+    - shipping_cny / duty_cny：头程成本，供 profit_calculator.shipping_cost 使用
+    - landed_cny：仅 = 运费 + 关税（不含售价、不含采购价）
+    - destination：默认 US；美国站选品必须用 US，禁止默认成 CN
 
-    Returns:
-        items: 每件候选的 LandedCost，按 landed_cny 升序。
+    declared_value_ratio：用售价估算申报货值的比例（无真实采购价时的 MVP 近似）。
     """
-    await monitor.report_tool_start("shipping_calc", {
-        "items_count": len(points),
-        "destination": destination,
-    })
+    destination = (destination or "US").upper()
+    ratio = min(max(declared_value_ratio, 0.05), 1.0)
+    await monitor.report_tool_start(
+        "shipping_calc",
+        {
+            "items_count": len(points),
+            "destination": destination,
+        },
+    )
     t0 = time.time()
 
     landed: list[LandedCost] = []
     for p in points:
         weight = _weight_kg(p)
-        shipping_cny, eta = estimate_shipping(weight, p.platform)
-        duty_cny, duty_tier = estimate_duty(p.price_cny, p.platform)
-        total = round(p.price_cny + shipping_cny + duty_cny, 2)
-        landed.append(LandedCost(
-            item_id=p.item_id,
-            platform=p.platform,
-            price_cny=p.price_cny,
-            shipping_cny=shipping_cny,
-            duty_cny=duty_cny,
-            landed_cny=total,
-            eta_days=eta,
-            duty_tier=duty_tier,
-            rating=p.rating,
-            review_count=p.review_count,
-            sales=p.sales,
-            weight_kg=p.weight_kg,
-        ))
+        shipping_cny, eta = estimate_shipping(
+            weight, p.platform, destination=destination
+        )
+        declared = round(p.price_cny * ratio, 2)
+        duty_cny, duty_tier = estimate_duty(
+            declared, p.platform, destination=destination
+        )
+        outbound = round(shipping_cny + duty_cny, 2)
+        landed.append(
+            LandedCost(
+                item_id=p.item_id,
+                platform=p.platform,
+                price_cny=p.price_cny,
+                shipping_cny=shipping_cny,
+                duty_cny=duty_cny,
+                landed_cny=outbound,
+                eta_days=eta,
+                duty_tier=duty_tier,
+                rating=p.rating,
+                review_count=p.review_count,
+                sales=p.sales,
+                weight_kg=p.weight_kg,
+            )
+        )
 
     landed.sort(key=lambda x: x.landed_cny)
 

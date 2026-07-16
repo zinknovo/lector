@@ -157,7 +157,7 @@ async def selection_decision(
     if scores["profit"] is not None and scores["profit"] >= 0.7:
         reasons.append("利润能力达到目标")
     if scores["logistics"] is not None and scores["logistics"] >= 0.7:
-        reasons.append("物流与到手成本可控")
+        reasons.append("物流与头程成本可控")
     if supplier_risk_level == RiskLevel.HIGH:
         risks.append("供应商风险为 high")
         recommendation = Recommendation.REJECT

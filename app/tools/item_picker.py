@@ -32,7 +32,7 @@ async def item_picker(
     user_preferences: list[str] | None = None,
     top_n: int = 3,
 ) -> ItemPickerOutput:
-    """从到手价 Top-N 候选中精挑 1-3 件最契合用户的商品。"""
+    """从候选里精挑 1-3 个更值得上架验证的 SKU（卖家视角）。"""
     await monitor.report_tool_start(
         "item_picker",
         {
@@ -106,16 +106,16 @@ def _score(
         ):
             score += 0.25
             reasons.append(
-                f"到手价 {cost.landed_cny} 落在中档 {budget_tier.range_cny}"
+                f"头程成本 {cost.landed_cny} 落在预算带 {budget_tier.range_cny}"
             )
 
     if cost.eta_days <= 12:
         score += 0.15
-        reasons.append(f"{cost.eta_days} 天到手")
+        reasons.append(f"头程约 {cost.eta_days} 天")
 
     if cost.duty_tier == "免征":
         score += 0.1
-        reasons.append("跨境直邮免税")
+        reasons.append("目标市场进口税较低")
 
     if cost.rating is not None and cost.rating >= 4.5:
         score += 0.15

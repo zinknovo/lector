@@ -31,6 +31,7 @@ def test_full_tool_set_registers_all_implemented_tools() -> None:
         "item_picker",
         "price_compare",
         "shipping_calc",
+        "procurement_quote",
         "profit_calculator",
         "supplier_evaluator",
         "selection_decision",

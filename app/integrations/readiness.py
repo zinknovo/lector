@@ -51,7 +51,7 @@ def _configured(value: str | None) -> bool:
 
 
 def _native_timeout_seconds(cap: float = 3.0) -> float:
-    readiness_timeout = float(os.environ.get("READINESS_TIMEOUT_SECONDS", "30"))
+    readiness_timeout = float(os.environ.get("READINESS_TIMEOUT_SECONDS", "120"))
     return max(0.1, min(cap, readiness_timeout * 0.8))
 
 
@@ -67,7 +67,7 @@ async def _check_apify(api_token: str | None = None) -> str:
     token = api_token or os.environ.get("APIFY_API_TOKEN")
     if not _configured(token):
         raise CapabilitySkipped("APIFY_API_TOKEN is not configured")
-    timeout = float(os.environ.get("READINESS_TIMEOUT_SECONDS", "30"))
+    timeout = float(os.environ.get("READINESS_TIMEOUT_SECONDS", "120"))
     source = ApifyAmazonDataSource(
         api_token=token,
         request_timeout_seconds=max(1.0, timeout * 0.8),
@@ -170,7 +170,7 @@ async def run_readiness(
         raise ValueError(f"unknown readiness checks: {', '.join(sorted(unknown))}")
     results: list[CheckResult] = []
     deadline = timeout_seconds or float(
-        os.environ.get("READINESS_TIMEOUT_SECONDS", "30")
+        os.environ.get("READINESS_TIMEOUT_SECONDS", "120")
     )
     if deadline <= 0:
         raise ValueError("readiness timeout must be positive")

@@ -142,7 +142,7 @@ describe("useGlobexTask", () => {
     await act(() => result.current.startTask("   "));
 
     expect(fetch).not.toHaveBeenCalled();
-    expect(result.current.error).toBe("请输入购物需求");
+    expect(result.current.error).toBe("请输入选品需求");
   });
 
   test("closes the socket when unmounted", async () => {
