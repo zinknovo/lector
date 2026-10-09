@@ -10,7 +10,15 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.api import server, task_runner
+from app.api import agui as agui_module
 from app.api.monitor import monitor
+
+
+@pytest.fixture(autouse=True)
+def _isolated_log_dir(tmp_path, monkeypatch):
+    """事件日志落到临时目录，测试不污染 output/ 也不跨测试互相影响。"""
+    monkeypatch.setattr(agui_module.agui_runtime, "log_dir", tmp_path / "agui")
+    yield
 
 
 def _sse_frames(body: str) -> list[dict[str, Any]]:
@@ -131,7 +139,9 @@ def test_resume_from_cursor_only_returns_later_events(
         assert later[-1]["event"]["type"] == "RUN_FINISHED"
 
 
-def test_cancel_marks_run_as_cancelled(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_cancel_marks_run_as_cancelled(
+    monkeypatch: pytest.MonkeyPatch, tmp_path
+) -> None:
     """取消语义在 runtime 层验证（HTTP 取消路由的 404/接线另有测试覆盖）。"""
     from ag_ui.core import RunAgentInput
 
@@ -146,7 +156,7 @@ def test_cancel_marks_run_as_cancelled(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(task_runner, "run_agent", fake_run)
 
     async def scenario() -> None:
-        runtime = AGUIRunRuntime()
+        runtime = AGUIRunRuntime(log_dir=tmp_path / "agui")
         body = RunAgentInput.model_validate(_payload("run-3", "thread-3"))
         record = await runtime.start(body, "美国站卖保温杯", "user-1")
         await asyncio.sleep(0.05)
@@ -195,3 +205,80 @@ def test_unknown_run_returns_404() -> None:
     with TestClient(server.app) as client:
         assert client.get("/ag-ui/runs/nope").status_code == 404
         assert client.post("/ag-ui/runs/nope/cancel").status_code == 404
+
+
+def test_completed_run_is_replayed_from_disk(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
+    """进程重启后（新 runtime 实例）仍能按游标重放已完成的运行。"""
+
+    async def fake_run(
+        query: str, thread_id: str, user_id: str | None = None
+    ) -> dict[str, Any]:
+        await monitor.report_task_result("完成")
+        return {"status": "ok"}
+
+    monkeypatch.setattr(task_runner, "run_agent", fake_run)
+    with TestClient(server.app) as client:
+        first = client.post("/ag-ui/run", json=_payload("run-disk", "thread-disk"))
+        assert first.status_code == 200
+
+    restarted = agui_module.AGUIRunRuntime(
+        log_dir=agui_module.agui_runtime.log_dir
+    )
+    events, status, last = restarted.events("run-disk", 0)
+    types = [item["event"]["type"] for item in events]
+    assert status == "completed"
+    assert types[0] == "RUN_STARTED"
+    assert types[-1] == "RUN_FINISHED"
+    assert last == events[-1]["seq"]
+
+
+def test_unfinished_run_is_marked_interrupted(tmp_path) -> None:
+    """没有终态事件的日志在重启后如实标记为 interrupted。"""
+    log_dir = tmp_path / "agui"
+    log_dir.mkdir(parents=True, exist_ok=True)
+    (log_dir / "run-half.jsonl").write_text(
+        json.dumps(
+            {
+                "seq": 1,
+                "event": {
+                    "type": "RUN_STARTED",
+                    "threadId": "thread-half",
+                    "runId": "run-half",
+                },
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    runtime = agui_module.AGUIRunRuntime(log_dir=log_dir)
+    events, status, _ = runtime.events("run-half", 0)
+    types = [item["event"]["type"] for item in events]
+    assert status == "interrupted"
+    assert types[-1] == "RUN_ERROR"
+    assert events[-1]["event"]["code"] == "INTERRUPTED"
+    assert any(
+        item["event"].get("name") == "run_interrupted" for item in events
+    )
+
+
+def test_duplicate_run_id_is_rejected(monkeypatch: pytest.MonkeyPatch) -> None:
+    async def fake_run(
+        query: str, thread_id: str, user_id: str | None = None
+    ) -> dict[str, Any]:
+        await monitor.report_task_result("完成")
+        return {"status": "ok"}
+
+    monkeypatch.setattr(task_runner, "run_agent", fake_run)
+    with TestClient(server.app) as client:
+        assert client.post("/ag-ui/run", json=_payload("run-dup", "thread-dup")).status_code == 200
+        again = client.post("/ag-ui/run", json=_payload("run-dup", "thread-dup"))
+        assert again.status_code == 409
+
+
+def test_invalid_run_or_thread_id_is_rejected() -> None:
+    with TestClient(server.app) as client:
+        bad_run = _payload("../evil", "thread-ok")
+        assert client.post("/ag-ui/run", json=bad_run).status_code == 422
+        bad_thread = _payload("run-ok", "../evil")
+        assert client.post("/ag-ui/run", json=bad_thread).status_code == 422

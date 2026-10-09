@@ -7,8 +7,10 @@ from typing import Any
 
 from langchain.agents import create_agent
 from langchain_core.messages import HumanMessage
+from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.errors import GraphRecursionError
 
+from app.agent.checkpoint import open_checkpointer
 from app.agent.harness import build_harness_middleware
 from app.agent.llm import get_llm
 from app.agent.prompts import get_system_prompt
@@ -30,13 +32,19 @@ MAIN_AGENT_MAX_ITERATIONS = 45
 MAIN_AGENT_TIMEOUT_SEC = int(os.environ.get("MAIN_AGENT_TIMEOUT_SEC", "600"))
 
 
-def _build_main_agent(prompt: str):
-    """主 Agent 装配：业务工具 + Harness 中间件（工具边界与轮次边界护栏）。"""
+def _build_main_agent(
+    prompt: str, *, checkpointer: BaseCheckpointSaver | None = None
+):
+    """主 Agent 装配：业务工具 + Harness 中间件（工具边界与轮次边界护栏）。
+
+    checkpointer 存在时，同一 thread 的再次运行会接着已有状态继续（追问场景）。
+    """
     return create_agent(
         model=get_llm(),
         tools=FULL_TOOL_SET,
         system_prompt=prompt,
         middleware=[build_harness_middleware()],
+        checkpointer=checkpointer,
     )
 
 
@@ -126,10 +134,34 @@ async def run_agent(
     )
     pref_text = pref_text or "（暂无沉淀偏好）"
     prompt = get_system_prompt(long_term_preferences=pref_text)
-    agent = _build_main_agent(prompt)
 
+    async with open_checkpointer(session_dir) as checkpointer:
+        agent = _build_main_agent(prompt, checkpointer=checkpointer)
+        result = await _invoke_with_limits(agent, query, thread_id)
+    if result is None:
+        return {"status": "incomplete", "thread_id": thread_id}
+
+    final_message = result["messages"][-1]
+    await persist_learned_preferences(user_id, result["messages"])
+
+    final_text = _message_text(final_message.content)
+    safe, final_text = audit_output(final_text)
+    if not safe:
+        await monitor.report_event(
+            "output_audit",
+            "最终回复命中敏感模式（密钥/内部地址/本机路径），已脱敏后下发",
+            {"status": "redacted"},
+        )
+    await monitor.report_task_result(final_text)
+    return {"status": "ok", "thread_id": thread_id, "final": final_text}
+
+
+async def _invoke_with_limits(
+    agent: Any, query: str, thread_id: str
+) -> dict[str, Any] | None:
+    """带超时与迭代上限的执行；触限时发事件并返回 None（收尾语义）。"""
     try:
-        result = await asyncio.wait_for(
+        return await asyncio.wait_for(
             agent.ainvoke(
                 {"messages": [HumanMessage(content=query)]},
                 config={
@@ -149,7 +181,7 @@ async def run_agent(
             "已产出的中间结果保留在执行记录中，不会补写未核验的数据",
             {"reason": "timeout", "limit_sec": MAIN_AGENT_TIMEOUT_SEC},
         )
-        return {"status": "timeout", "thread_id": thread_id}
+        return None
     except GraphRecursionError:
         await monitor.report_error(
             "iteration_limit", f"达到迭代上限 {MAIN_AGENT_MAX_ITERATIONS}"
@@ -160,19 +192,5 @@ async def run_agent(
             "请缩小选品范围或基于已有证据重新发起",
             {"reason": "iteration_limit", "limit": MAIN_AGENT_MAX_ITERATIONS},
         )
-        return {"status": "iteration_limit", "thread_id": thread_id}
-
-    final_message = result["messages"][-1]
-    await persist_learned_preferences(user_id, result["messages"])
-
-    final_text = _message_text(final_message.content)
-    safe, final_text = audit_output(final_text)
-    if not safe:
-        await monitor.report_event(
-            "output_audit",
-            "最终回复命中敏感模式（密钥/内部地址/本机路径），已脱敏后下发",
-            {"status": "redacted"},
-        )
-    await monitor.report_task_result(final_text)
-    return {"status": "ok", "thread_id": thread_id, "final": final_text}
+        return None
 

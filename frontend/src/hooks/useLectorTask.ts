@@ -23,6 +23,7 @@ export function useLectorTask() {
 
   const agentRef = useRef<HttpAgent | null>(null);
   const runIdRef = useRef<string | null>(null);
+  const threadIdRef = useRef<string | null>(null);
   const noticeRef = useRef<string | null>(null);
   const mountedRef = useRef(true);
 
@@ -116,8 +117,10 @@ export function useLectorTask() {
       setError(null);
       noticeRef.current = null;
 
-      const thread = crypto.randomUUID();
+      // 同一页面会话内的追问沿用同一个 thread：服务端按会话 checkpoint 延续。
+      const thread = threadIdRef.current ?? crypto.randomUUID();
       const runId = crypto.randomUUID();
+      threadIdRef.current = thread;
       setThreadId(thread);
       runIdRef.current = runId;
       setRunning(true);
@@ -162,6 +165,17 @@ export function useLectorTask() {
     [handleAguiEvent],
   );
 
+  const resetSession = useCallback(() => {
+    agentRef.current?.abortRun();
+    threadIdRef.current = null;
+    runIdRef.current = null;
+    setThreadId(null);
+    setEvents([]);
+    setFinalAnswer(null);
+    setError(null);
+    setRunning(false);
+  }, []);
+
   const cancelTask = useCallback(async () => {
     const runId = runIdRef.current;
     agentRef.current?.abortRun();
@@ -189,5 +203,6 @@ export function useLectorTask() {
     error,
     startTask,
     cancelTask,
+    resetSession,
   };
 }

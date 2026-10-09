@@ -102,6 +102,18 @@ Demo 使用 Mock 商品完成趋势发现、候选筛选、利润测算、供应
   `LECTOR_TASK_TOOL_BUDGET`（默认 30）/ `LECTOR_TASK_RESULT_CHAR_BUDGET`（默认 300000）
   时，注入一次"收窄查询范围"提示（不换模型、不阻断）。
 
+## 会话与恢复
+
+同一会话（thread）的状态持久化在会话目录：
+
+- `output/<thread_id>/checkpoints.sqlite`：LangGraph checkpoint。重启后同一 thread 再次发起
+  （页面上的追问）会延续上一次的对话与证据，不必重跑全部工具；
+- `output/<thread_id>/evidence.jsonl`：证据库（见上文）；
+- `output/agui/<run_id>.jsonl`：AG-UI 运行事件日志。重启后仍可按游标重放已接收内容；
+  未收到终态事件的运行会被如实标记为 `interrupted`（不假装完成，也不自动续跑模型执行栈）。
+
+前端在页面会话内复用同一个 thread，直到点击"新会话"。
+
 ## 业务准确性与评测交付
 
 为了让“选得好不好”更贴近跨境卖家的业务语义，系统在 `selection_decision` 做了证据质量门禁：

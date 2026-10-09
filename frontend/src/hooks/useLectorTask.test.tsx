@@ -211,3 +211,40 @@ describe("useLectorTask", () => {
     expect(result.current.error).toBeNull();
   });
 });
+
+
+test("reuses the thread id for follow-ups until the session is reset", async () => {
+    const posted: Array<Record<string, unknown>> = [];
+    const fetchMock = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      const body = JSON.parse(String(init?.body)) as Record<string, unknown>;
+      posted.push(body);
+      const runId = String(body.runId);
+      return sse(runId, [
+        [1, { type: "RUN_STARTED", threadId: body.threadId, runId }],
+        [2, { type: "RUN_FINISHED", threadId: body.threadId, runId, outcome: { type: "success" } }],
+      ]);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { useLectorTask } = await loadHook();
+    const { result } = renderHook(() => useLectorTask());
+
+    await act(async () => {
+      await result.current.startTask("第一个问题");
+    });
+    await act(async () => {
+      await result.current.startTask("继续追问");
+    });
+    expect(posted[0].threadId).toBe(posted[1].threadId);
+    expect(posted[0].runId).not.toBe(posted[1].runId);
+
+    act(() => {
+      result.current.resetSession();
+    });
+    expect(result.current.threadId).toBeNull();
+
+    await act(async () => {
+      await result.current.startTask("新会话");
+    });
+    expect(posted[2].threadId).not.toBe(posted[0].threadId);
+  });

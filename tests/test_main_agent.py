@@ -10,6 +10,8 @@ def test_main_agent_is_built_with_limits_tools_and_harness_middleware() -> None:
     assert "MAIN_AGENT_TIMEOUT_SEC" in source
     assert "tools=FULL_TOOL_SET" in source
     assert "middleware=[build_harness_middleware()]" in source
+    assert "checkpointer=checkpointer" in source
+    assert "open_checkpointer(session_dir)" in source
     assert "audit_output" in source
     assert any(
         isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))

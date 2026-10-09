@@ -16,7 +16,9 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import json
+import re
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any, Callable
 
 from ag_ui.core import (
@@ -39,6 +41,10 @@ from fastapi.responses import StreamingResponse
 
 from app.api.run_events import observe_thread_events
 from app.api.task_runner import run_agent_scoped
+from app.utils.path_utils import OUTPUT_ROOT
+
+AGUI_LOG_DIR = OUTPUT_ROOT / "agui"
+_RUN_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$")
 
 _TOOL_LABELS = {
     "planner": "拆解选品意图",
@@ -296,17 +302,20 @@ class RunRecord:
     task: asyncio.Task[None] | None = None
     adapter: AGUIRunAdapter | None = None
     seq: int = 0
+    path: Path | None = None
 
     def append(self, event: BaseEvent) -> None:
         self.seq += 1
-        self.events.append(
-            {
-                "seq": self.seq,
-                "event": event.model_dump(
-                    mode="json", by_alias=True, exclude_none=True
-                ),
-            }
-        )
+        payload = {
+            "seq": self.seq,
+            "event": event.model_dump(mode="json", by_alias=True, exclude_none=True),
+        }
+        self.events.append(payload)
+        if self.path is not None:
+            self.path.parent.mkdir(parents=True, exist_ok=True)
+            with self.path.open("a", encoding="utf-8") as handle:
+                handle.write(json.dumps(payload, ensure_ascii=False))
+                handle.write("\n")
 
 
 class RunConflict(Exception):
@@ -318,22 +327,82 @@ class RunNotFound(Exception):
 
 
 class AGUIRunRuntime:
-    """内存运行日志；运行独立于 HTTP 订阅存在。"""
+    """运行日志（内存热缓存 + 会话目录 JSONL 落盘）；运行独立于 HTTP 订阅存在。"""
 
-    def __init__(self) -> None:
+    def __init__(self, log_dir: Path = AGUI_LOG_DIR) -> None:
         self.runs: dict[str, RunRecord] = {}
+        self.log_dir = log_dir
+
+    def _log_path(self, run_id: str) -> Path:
+        return self.log_dir / f"{run_id}.jsonl"
+
+    def _load_from_disk(self, run_id: str) -> RunRecord | None:
+        """重启后按 run_id 读回事件日志；未结束的运行标记为 interrupted。"""
+        path = self._log_path(run_id)
+        if not path.exists():
+            return None
+        events: list[dict[str, Any]] = []
+        for line in path.read_text(encoding="utf-8").splitlines():
+            stripped = line.strip()
+            if not stripped:
+                continue
+            try:
+                item = json.loads(stripped)
+            except ValueError:
+                continue
+            if isinstance(item, dict) and "seq" in item and "event" in item:
+                events.append(item)
+        if not events:
+            return None
+        first_event = events[0]["event"] if isinstance(events[0]["event"], dict) else {}
+        last_type = (
+            events[-1]["event"].get("type")
+            if isinstance(events[-1]["event"], dict)
+            else None
+        )
+        status = {
+            "RUN_FINISHED": "completed",
+            "RUN_ERROR": "error",
+        }.get(str(last_type), "interrupted")
+        record = RunRecord(
+            run_id=run_id,
+            thread_id=str(first_event.get("threadId", "")),
+            user_id=None,
+            status=status,
+            events=events,
+            seq=int(events[-1]["seq"]),
+            path=path,
+        )
+        if status == "interrupted":
+            record.append(
+                CustomEvent(
+                    name="run_interrupted",
+                    value={"message": "运行未发出终态事件即中断；已保留已接收内容"},
+                )
+            )
+            record.append(
+                RunErrorEvent(
+                    message="运行已中断（未完成全部核验，可基于已有内容重新发起）",
+                    code="INTERRUPTED",
+                )
+            )
+        self.runs[run_id] = record
+        return record
 
     async def start(
         self, body: RunAgentInput, query: str, user_id: str | None
     ) -> RunRecord:
-        if body.run_id in self.runs:
+        if body.run_id in self.runs or self._log_path(body.run_id).exists():
             raise RunConflict(body.run_id)
         # 同一会话的旧运行先按既有语义停掉（对齐 /api/task 的单任务行为）
         for record in list(self.runs.values()):
             if record.thread_id == body.thread_id and record.status == "running":
                 await self.cancel(record.run_id)
         record = RunRecord(
-            run_id=body.run_id, thread_id=body.thread_id, user_id=user_id
+            run_id=body.run_id,
+            thread_id=body.thread_id,
+            user_id=user_id,
+            path=self._log_path(body.run_id),
         )
         self.runs[body.run_id] = record
         record.task = asyncio.create_task(
@@ -387,14 +456,14 @@ class AGUIRunRuntime:
     def events(
         self, run_id: str, after: int
     ) -> tuple[list[dict[str, Any]], str, int]:
-        record = self.runs.get(run_id)
-        if record is None:
-            raise RunNotFound(run_id)
+        record = self.run(run_id)
         pending = [item for item in record.events if int(item["seq"]) > after]
         return pending, record.status, record.seq
 
     def run(self, run_id: str) -> RunRecord:
         record = self.runs.get(run_id)
+        if record is None:
+            record = self._load_from_disk(run_id)
         if record is None:
             raise RunNotFound(run_id)
         return record
@@ -405,6 +474,13 @@ def _extract_query(body: RunAgentInput) -> str:
         raise HTTPException(status_code=422, detail="当前接口只执行后端工具，尚未支持前端 tools")
     if not body.thread_id.strip() or not body.run_id.strip():
         raise HTTPException(status_code=422, detail="threadId 和 runId 不能为空")
+    if not _RUN_ID_RE.fullmatch(body.run_id) or not _RUN_ID_RE.fullmatch(
+        body.thread_id
+    ):
+        raise HTTPException(
+            status_code=422,
+            detail="threadId / runId 只能包含字母、数字、下划线和连字符",
+        )
     if not body.messages or body.messages[-1].role != "user":
         raise HTTPException(status_code=422, detail="messages 最后一项必须是本轮 user 消息")
     content = body.messages[-1].content

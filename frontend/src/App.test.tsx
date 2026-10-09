@@ -6,6 +6,7 @@ const mocks = vi.hoisted(() => ({
   useLectorTask: vi.fn(),
   startTask: vi.fn(),
   cancelTask: vi.fn(),
+  resetSession: vi.fn(),
 }));
 
 vi.mock("./hooks/useLectorTask", () => ({ useLectorTask: mocks.useLectorTask }));
@@ -18,6 +19,7 @@ describe("App", () => {
   beforeEach(() => {
     mocks.startTask.mockReset();
     mocks.cancelTask.mockReset();
+    mocks.resetSession.mockReset();
     mocks.useLectorTask.mockReturnValue({
       threadId: null,
       events: [],
@@ -26,6 +28,7 @@ describe("App", () => {
       error: null,
       startTask: mocks.startTask,
       cancelTask: mocks.cancelTask,
+      resetSession: mocks.resetSession,
     });
   });
 
@@ -54,6 +57,7 @@ describe("App", () => {
       error: null,
       startTask: mocks.startTask,
       cancelTask: mocks.cancelTask,
+      resetSession: mocks.resetSession,
     });
     const { default: App } = await loadApp();
     const user = userEvent.setup();
@@ -75,6 +79,7 @@ describe("App", () => {
       error: null,
       startTask: mocks.startTask,
       cancelTask: mocks.cancelTask,
+      resetSession: mocks.resetSession,
     });
     const { default: App } = await loadApp();
     const { container } = render(<App />);
@@ -92,10 +97,35 @@ describe("App", () => {
       error: "后端不可用",
       startTask: mocks.startTask,
       cancelTask: mocks.cancelTask,
+      resetSession: mocks.resetSession,
     });
     const { default: App } = await loadApp();
     render(<App />);
 
     expect(screen.getByRole("alert")).toHaveTextContent("后端不可用");
+  });
+});
+
+
+describe("App session controls", () => {
+  afterEach(() => cleanup());
+
+  test("offers a new-session action once a thread exists", async () => {
+    mocks.useLectorTask.mockReturnValue({
+      threadId: "thread-1234",
+      events: [],
+      finalAnswer: null,
+      running: false,
+      error: null,
+      startTask: mocks.startTask,
+      cancelTask: mocks.cancelTask,
+      resetSession: mocks.resetSession,
+    });
+    const { default: App } = await loadApp();
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(screen.getByRole("button", { name: "新会话" }));
+    expect(mocks.resetSession).toHaveBeenCalledTimes(1);
   });
 });

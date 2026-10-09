@@ -13,6 +13,7 @@ export default function App() {
     error,
     startTask,
     cancelTask,
+    resetSession,
   } = useLectorTask();
   const [query, setQuery] = useState("");
 
@@ -46,6 +47,16 @@ export default function App() {
           <span className="thread-status">
             {threadId ? `会话 ${threadId.slice(0, 8)}` : "等待新任务"}
           </span>
+          {threadId && (
+            <button
+              className="button"
+              type="button"
+              onClick={() => resetSession()}
+              disabled={running}
+            >
+              新会话
+            </button>
+          )}
           {running ? (
             <button className="button button-danger" type="button" onClick={() => void cancelTask()}>
               取消任务

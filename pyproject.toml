@@ -21,6 +21,7 @@ dependencies = [
     "openpyxl>=3.1.5",
     "reportlab>=4.4.0",
     "ag-ui-protocol==0.1.22",
+    "langgraph-checkpoint-sqlite>=3.1.1",
 ]
 
 [dependency-groups]
