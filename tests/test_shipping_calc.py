@@ -128,3 +128,13 @@ def test_estimate_shipping_raises_for_unknown_destination() -> None:
 
     with pytest.raises(UnknownDestinationError, match="BR"):
         estimate_shipping(0.5, destination="BR")
+
+
+def test_blank_destination_does_not_silently_default() -> None:
+    """显式传入空白目的地不得静默按 US 处理。"""
+    result = asyncio.run(
+        shipping_calc.ainvoke({"points": [_point()], "destination": "   "})
+    )
+    assert result.items == []
+    assert len(result.unavailable) == 1
+    assert "（空）" in result.unavailable[0].reason

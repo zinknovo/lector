@@ -136,13 +136,18 @@ async def selection_decision(
     started_at = time.time()
 
     # 读取本会话证据库：门禁数值优先采用库中值（模型转述仅作对照）。
+    # 取值先按本商品限定（证据绑定了 product_id 时），取不到再退回会话内最近一条。
     store = get_evidence_store()
-    procurement_item = (
-        store.latest(field="procurement_cost_cny") if store is not None else None
-    )
-    revenue_item = (
-        store.latest(field="selling_price_evidence") if store is not None else None
-    )
+
+    def _latest_scoped(field: str) -> EvidenceItem | None:
+        if store is None:
+            return None
+        return store.latest(field=field, product_id=product_id) or store.latest(
+            field=field
+        )
+
+    procurement_item = _latest_scoped("procurement_cost_cny")
+    revenue_item = _latest_scoped("selling_price_evidence")
     landed_item = (
         store.latest(field="landed_cost_cny", product_id=product_id)
         if store is not None

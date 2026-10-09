@@ -9,23 +9,14 @@
 
 from __future__ import annotations
 
-import os
 import time
 from dataclasses import dataclass
 from typing import Callable
 
+from app.utils.env import env_float
+
 DEFAULT_THRESHOLD = 3
 DEFAULT_COOLDOWN_SECONDS = 60.0
-
-
-def _env_float(name: str, default: float) -> float:
-    raw = os.environ.get(name, "").strip()
-    if not raw:
-        return default
-    try:
-        return float(raw)
-    except ValueError:
-        return default
 
 
 @dataclass
@@ -46,12 +37,12 @@ class ToolCircuitBreaker:
         clock: Callable[[], float] = time.monotonic,
     ) -> None:
         self.threshold = threshold or int(
-            _env_float("LECTOR_BREAKER_THRESHOLD", DEFAULT_THRESHOLD)
+            env_float("LECTOR_BREAKER_THRESHOLD", DEFAULT_THRESHOLD)
         )
         self.cooldown_seconds = (
             cooldown_seconds
             if cooldown_seconds is not None
-            else _env_float("LECTOR_BREAKER_COOLDOWN_SEC", DEFAULT_COOLDOWN_SECONDS)
+            else env_float("LECTOR_BREAKER_COOLDOWN_SEC", DEFAULT_COOLDOWN_SECONDS)
         )
         self._clock = clock
         self._states: dict[tuple[str, str], _CircuitState] = {}

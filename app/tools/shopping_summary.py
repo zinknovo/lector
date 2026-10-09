@@ -121,11 +121,15 @@ async def shopping_summary(
     decisions: list[SelectionDecision],
     user_query: str,
     new_preferences: list[str] | None = None,
+    active_preferences: list[str] | None = None,
 ) -> ShoppingSummaryOutput:
     """Render final prose and structured rows from verified selection decisions.
 
     new_preferences：只放卖家明确要求长期记住的偏好；负向偏好以「不要/避免/避开」
     开头，其余按正向偏好保存（写入由主流程完成，本工具只回传）。
+
+    active_preferences：本次实际用上的长期偏好（来自系统提示里的偏好条目，
+    只填真正影响筛选/结论的；报告会注明，无依据不要编造）。
     """
     await monitor.report_tool_start(
         "shopping_summary", {"decisions_count": len(decisions)}
@@ -146,6 +150,7 @@ async def shopping_summary(
                         "decisions": [
                             decision.model_dump(mode="json") for decision in decisions
                         ],
+                        "active_preferences": active_preferences or [],
                     },
                     ensure_ascii=False,
                 ),

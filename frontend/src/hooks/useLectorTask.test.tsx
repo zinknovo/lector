@@ -37,10 +37,12 @@ async function loadHook() {
 describe("useLectorTask", () => {
   beforeEach(() => {
     vi.stubGlobal("fetch", vi.fn());
+    sessionStorage.clear();
   });
 
   afterEach(() => {
     vi.unstubAllGlobals();
+    sessionStorage.clear();
   });
 
   test("streams AG-UI events into UI state and finishes", async () => {
@@ -248,3 +250,93 @@ test("reuses the thread id for follow-ups until the session is reset", async () 
     });
     expect(posted[2].threadId).not.toBe(posted[0].threadId);
   });
+
+
+describe("useLectorTask resume", () => {
+  beforeEach(() => {
+    sessionStorage.clear();
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    sessionStorage.clear();
+  });
+
+  test("restores the stored run on mount and marks it finished", async () => {
+    sessionStorage.setItem(
+      "lector.active-run",
+      JSON.stringify({ threadId: "thread-restored", runId: "run-restored" }),
+    );
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      expect(String(input)).toBe("/ag-ui/runs/run-restored/events?after=0");
+      expect(init?.signal).toBeDefined();
+      return sse("run-restored", [
+        [1, { type: "RUN_STARTED", threadId: "thread-restored", runId: "run-restored" }],
+        [2, { type: "TOOL_CALL_START", toolCallId: "c1", toolCallName: "item_search" }],
+        [3, { type: "TOOL_CALL_END", toolCallId: "c1" }],
+        [4, {
+          type: "MESSAGES_SNAPSHOT",
+          messages: [{ id: "a1", role: "assistant", content: "恢复的报告" }],
+        }],
+        [5, { type: "RUN_FINISHED", threadId: "thread-restored", runId: "run-restored", outcome: { type: "success" } }],
+      ]);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { useLectorTask } = await loadHook();
+    const { result } = renderHook(() => useLectorTask());
+
+    await waitFor(() => expect(result.current.finalAnswer).toBe("恢复的报告"));
+    expect(result.current.threadId).toBe("thread-restored");
+    expect(result.current.events.map((event) => event.event)).toEqual([
+      "session_created",
+      "tool_start",
+    ]);
+    expect(result.current.running).toBe(false);
+  });
+
+  test("drops the stored run when its log is gone", async () => {
+    sessionStorage.setItem(
+      "lector.active-run",
+      JSON.stringify({ threadId: "thread-x", runId: "run-x" }),
+    );
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response("{}", { status: 404 })),
+    );
+
+    const { useLectorTask } = await loadHook();
+    const { result } = renderHook(() => useLectorTask());
+
+    await waitFor(() => expect(result.current.running).toBe(false));
+    expect(sessionStorage.getItem("lector.active-run")).toBeNull();
+    expect(result.current.threadId).toBeNull();
+  });
+
+  test("starting a run stores it and resetSession clears the store", async () => {
+    const fetchMock = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      const runId = String(JSON.parse(String(init?.body)).runId);
+      return sse(runId, [
+        [1, { type: "RUN_STARTED", threadId: "t", runId }],
+        [2, { type: "RUN_FINISHED", threadId: "t", runId, outcome: { type: "success" } }],
+      ]);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { useLectorTask } = await loadHook();
+    const { result } = renderHook(() => useLectorTask());
+
+    await act(async () => {
+      await result.current.startTask("查保温杯");
+    });
+    const stored = JSON.parse(
+      sessionStorage.getItem("lector.active-run") ?? "null",
+    ) as { threadId: string; runId: string } | null;
+    expect(stored?.threadId).toBe(result.current.threadId);
+
+    act(() => {
+      result.current.resetSession();
+    });
+    expect(sessionStorage.getItem("lector.active-run")).toBeNull();
+  });
+});

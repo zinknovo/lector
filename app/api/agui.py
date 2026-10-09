@@ -41,9 +41,10 @@ from fastapi.responses import StreamingResponse
 
 from app.api.run_events import observe_thread_events
 from app.api.task_runner import run_agent_scoped
+from app.utils.jsonl import append_jsonl, iter_jsonl
 from app.utils.path_utils import OUTPUT_ROOT
 
-AGUI_LOG_DIR = OUTPUT_ROOT / "agui"
+AGUI_LOG_ROOT = OUTPUT_ROOT
 _RUN_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$")
 
 _TOOL_LABELS = {
@@ -306,18 +307,16 @@ class RunRecord:
     seq: int = 0
     path: Path | None = None
 
-    def append(self, event: BaseEvent) -> None:
+    def append(self, event: BaseEvent, *, persist: bool = True) -> None:
+        """写入事件；``persist=False`` 用于派生态（如 interrupted 标记），不落盘。"""
         self.seq += 1
         payload = {
             "seq": self.seq,
             "event": event.model_dump(mode="json", by_alias=True, exclude_none=True),
         }
         self.events.append(payload)
-        if self.path is not None:
-            self.path.parent.mkdir(parents=True, exist_ok=True)
-            with self.path.open("a", encoding="utf-8") as handle:
-                handle.write(json.dumps(payload, ensure_ascii=False))
-                handle.write("\n")
+        if persist and self.path is not None:
+            append_jsonl(self.path, payload)
 
 
 class RunConflict(Exception):
@@ -331,29 +330,27 @@ class RunNotFound(Exception):
 class AGUIRunRuntime:
     """运行日志（内存热缓存 + 会话目录 JSONL 落盘）；运行独立于 HTTP 订阅存在。"""
 
-    def __init__(self, log_dir: Path = AGUI_LOG_DIR) -> None:
+    def __init__(self, log_root: Path = AGUI_LOG_ROOT) -> None:
         self.runs: dict[str, RunRecord] = {}
-        self.log_dir = log_dir
+        self.log_root = log_root
 
-    def _log_path(self, run_id: str) -> Path:
-        return self.log_dir / f"{run_id}.jsonl"
+    def _log_path(self, thread_id: str, run_id: str) -> Path:
+        return self.log_root / thread_id / "agui" / f"{run_id}.jsonl"
+
+    def _find_run_log(self, run_id: str) -> Path | None:
+        matches = list(self.log_root.glob(f"*/agui/{run_id}.jsonl"))
+        return matches[0] if matches else None
 
     def _load_from_disk(self, run_id: str) -> RunRecord | None:
-        """重启后按 run_id 读回事件日志；未结束的运行标记为 interrupted。"""
-        path = self._log_path(run_id)
-        if not path.exists():
+        """重启后按 run_id 读回事件日志；未结束的运行标记为 interrupted（派生态不落盘）。"""
+        path = self._find_run_log(run_id)
+        if path is None:
             return None
-        events: list[dict[str, Any]] = []
-        for line in path.read_text(encoding="utf-8").splitlines():
-            stripped = line.strip()
-            if not stripped:
-                continue
-            try:
-                item = json.loads(stripped)
-            except ValueError:
-                continue
-            if isinstance(item, dict) and "seq" in item and "event" in item:
-                events.append(item)
+        events = [
+            item
+            for item in iter_jsonl(path)
+            if isinstance(item, dict) and "seq" in item and "event" in item
+        ]
         if not events:
             return None
         first_event = events[0]["event"] if isinstance(events[0]["event"], dict) else {}
@@ -368,7 +365,7 @@ class AGUIRunRuntime:
         }.get(str(last_type), "interrupted")
         record = RunRecord(
             run_id=run_id,
-            thread_id=str(first_event.get("threadId", "")),
+            thread_id=str(first_event.get("threadId", "")) or path.parents[1].name,
             user_id=None,
             status=status,
             events=events,
@@ -376,17 +373,20 @@ class AGUIRunRuntime:
             path=path,
         )
         if status == "interrupted":
+            # 派生标记只在内存里补，重复重启都会得到同样的 interrupted 结论
             record.append(
                 CustomEvent(
                     name="run_interrupted",
                     value={"message": "运行未发出终态事件即中断；已保留已接收内容"},
-                )
+                ),
+                persist=False,
             )
             record.append(
                 RunErrorEvent(
                     message="运行已中断（未完成全部核验，可基于已有内容重新发起）",
                     code="INTERRUPTED",
-                )
+                ),
+                persist=False,
             )
         self.runs[run_id] = record
         return record
@@ -394,7 +394,7 @@ class AGUIRunRuntime:
     async def start(
         self, body: RunAgentInput, query: str, user_id: str | None
     ) -> RunRecord:
-        if body.run_id in self.runs or self._log_path(body.run_id).exists():
+        if body.run_id in self.runs or self._find_run_log(body.run_id) is not None:
             raise RunConflict(body.run_id)
         # 同一会话的旧运行先按既有语义停掉（对齐 /api/task 的单任务行为）
         for record in list(self.runs.values()):
@@ -404,7 +404,7 @@ class AGUIRunRuntime:
             run_id=body.run_id,
             thread_id=body.thread_id,
             user_id=user_id,
-            path=self._log_path(body.run_id),
+            path=self._log_path(body.thread_id, body.run_id),
         )
         self.runs[body.run_id] = record
         record.task = asyncio.create_task(

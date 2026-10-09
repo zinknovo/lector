@@ -65,6 +65,41 @@ def _normalize(statement: str) -> str:
     return " ".join(statement.strip().casefold().split())
 
 
+def _resolve_add(
+    existing: list[Preference],
+    *,
+    buyer_id: str,
+    kind: PreferenceKind,
+    statement: str,
+    source: str,
+) -> PreferenceWrite:
+    """去重 / 反向冲突 / 上限判定；两种实现共用同一套语义。"""
+    target = _normalize(statement)
+    for item in existing:
+        if _normalize(item.statement) != target:
+            continue
+        if item.kind != kind:
+            raise PreferenceConflict(
+                f"已存在相反偏好（{item.kind}）：{item.statement}；请先撤回再保存"
+            )
+        return PreferenceWrite(preference=item, created=False)
+    if len(existing) >= MAX_PREFERENCES_PER_BUYER:
+        raise PreferenceStoreError(
+            f"偏好数量已达上限 {MAX_PREFERENCES_PER_BUYER}，请先撤回不再需要的条目"
+        )
+    now = utc_now()
+    preference = Preference(
+        memory_id=uuid4().hex,
+        buyer_id=buyer_id,
+        kind=kind,
+        statement=statement.strip(),
+        created_at=now,
+        updated_at=now,
+        source=source,
+    )
+    return PreferenceWrite(preference=preference, created=True)
+
+
 class PreferenceStore(Protocol):
     async def list_by_buyer(self, buyer_id: str) -> list[Preference]: ...
 
@@ -104,31 +139,12 @@ class InMemoryPreferenceStore:
         source: str = "tool",
     ) -> PreferenceWrite:
         items = self._items.setdefault(buyer_id, [])
-        target = _normalize(statement)
-        for existing in items:
-            if _normalize(existing.statement) != target:
-                continue
-            if existing.kind != kind:
-                raise PreferenceConflict(
-                    f"已存在相反偏好（{existing.kind}）：{existing.statement}；请先撤回再保存"
-                )
-            return PreferenceWrite(preference=existing, created=False)
-        if len(items) >= MAX_PREFERENCES_PER_BUYER:
-            raise PreferenceStoreError(
-                f"偏好数量已达上限 {MAX_PREFERENCES_PER_BUYER}，请先撤回不再需要的条目"
-            )
-        now = utc_now()
-        preference = Preference(
-            memory_id=uuid4().hex,
-            buyer_id=buyer_id,
-            kind=kind,
-            statement=statement.strip(),
-            created_at=now,
-            updated_at=now,
-            source=source,
+        write = _resolve_add(
+            items, buyer_id=buyer_id, kind=kind, statement=statement, source=source
         )
-        items.append(preference)
-        return PreferenceWrite(preference=preference, created=True)
+        if write.created:
+            items.append(write.preference)
+        return write
 
     async def forget(
         self,
@@ -213,31 +229,12 @@ class MongoPreferenceStore:
         collection = self._get_collection()
         self._ensure_indexes(collection)
         existing = self._list_sync(buyer_id)
-        target = _normalize(statement)
-        for item in existing:
-            if _normalize(item.statement) != target:
-                continue
-            if item.kind != kind:
-                raise PreferenceConflict(
-                    f"已存在相反偏好（{item.kind}）：{item.statement}；请先撤回再保存"
-                )
-            return PreferenceWrite(preference=item, created=False)
-        if len(existing) >= MAX_PREFERENCES_PER_BUYER:
-            raise PreferenceStoreError(
-                f"偏好数量已达上限 {MAX_PREFERENCES_PER_BUYER}，请先撤回不再需要的条目"
-            )
-        now = utc_now()
-        preference = Preference(
-            memory_id=uuid4().hex,
-            buyer_id=buyer_id,
-            kind=kind,
-            statement=statement.strip(),
-            created_at=now,
-            updated_at=now,
-            source=source,
+        write = _resolve_add(
+            existing, buyer_id=buyer_id, kind=kind, statement=statement, source=source
         )
-        collection.insert_one(preference.model_dump(mode="json"))
-        return PreferenceWrite(preference=preference, created=True)
+        if write.created:
+            collection.insert_one(write.preference.model_dump(mode="json"))
+        return write
 
     def _forget_sync(
         self, buyer_id: str, statement: str | None, memory_id: str | None

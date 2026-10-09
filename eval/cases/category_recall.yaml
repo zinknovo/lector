@@ -6,10 +6,12 @@ gates:
   mrr: 0.90
   ndcg@k: 0.90
   no_result_accuracy: 1.0
+  forbidden_leak_rate: 0.0
 queries:
   - id: q-earbuds-zh
     query: "蓝牙耳机"
     relevant: {"earbuds-bestseller": 3, "earbuds-attribute": 2, "earbuds-price": 2}
+    forbidden: ["backpack-bestseller", "thermos-bestseller"]
   - id: q-earbuds-alias
     query: "真无线耳机"
     relevant: {"earbuds-bestseller": 3, "earbuds-attribute": 2, "earbuds-price": 2}
@@ -31,6 +33,7 @@ queries:
   - id: q-thermos
     query: "保温杯"
     relevant: {"thermos-bestseller": 3, "thermos-attribute": 2, "thermos-price": 2}
+    forbidden: ["pillow-bestseller", "case-bestseller", "coffee-bestseller"]
   - id: q-thermos-alias
     query: "水杯"
     relevant: {"thermos-bestseller": 3, "thermos-attribute": 2, "thermos-price": 2}
@@ -46,6 +49,11 @@ queries:
   - id: q-coffee-alias
     query: "马克杯"
     relevant: {"coffee-bestseller": 3, "coffee-price": 2}
+  - id: q-near-miss
+    query: "茶杯"
+    expect_no_result: true
+    relevant: {}
+    forbidden: ["thermos-bestseller", "thermos-attribute", "thermos-price"]
   - id: q-empty
     query: "无人机"
     expect_no_result: true

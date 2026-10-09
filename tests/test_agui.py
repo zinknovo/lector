@@ -17,7 +17,7 @@ from app.api.monitor import monitor
 @pytest.fixture(autouse=True)
 def _isolated_log_dir(tmp_path, monkeypatch):
     """事件日志落到临时目录，测试不污染 output/ 也不跨测试互相影响。"""
-    monkeypatch.setattr(agui_module.agui_runtime, "log_dir", tmp_path / "agui")
+    monkeypatch.setattr(agui_module.agui_runtime, "log_root", tmp_path)
     yield
 
 
@@ -156,7 +156,7 @@ def test_cancel_marks_run_as_cancelled(
     monkeypatch.setattr(task_runner, "run_agent", fake_run)
 
     async def scenario() -> None:
-        runtime = AGUIRunRuntime(log_dir=tmp_path / "agui")
+        runtime = AGUIRunRuntime(log_root=tmp_path)
         body = RunAgentInput.model_validate(_payload("run-3", "thread-3"))
         record = await runtime.start(body, "美国站卖保温杯", "user-1")
         await asyncio.sleep(0.05)
@@ -222,7 +222,7 @@ def test_completed_run_is_replayed_from_disk(monkeypatch: pytest.MonkeyPatch, tm
         assert first.status_code == 200
 
     restarted = agui_module.AGUIRunRuntime(
-        log_dir=agui_module.agui_runtime.log_dir
+        log_root=agui_module.agui_runtime.log_root
     )
     events, status, last = restarted.events("run-disk", 0)
     types = [item["event"]["type"] for item in events]
@@ -234,7 +234,7 @@ def test_completed_run_is_replayed_from_disk(monkeypatch: pytest.MonkeyPatch, tm
 
 def test_unfinished_run_is_marked_interrupted(tmp_path) -> None:
     """没有终态事件的日志在重启后如实标记为 interrupted。"""
-    log_dir = tmp_path / "agui"
+    log_dir = tmp_path / "thread-half" / "agui"
     log_dir.mkdir(parents=True, exist_ok=True)
     (log_dir / "run-half.jsonl").write_text(
         json.dumps(
@@ -251,7 +251,7 @@ def test_unfinished_run_is_marked_interrupted(tmp_path) -> None:
         encoding="utf-8",
     )
 
-    runtime = agui_module.AGUIRunRuntime(log_dir=log_dir)
+    runtime = agui_module.AGUIRunRuntime(log_root=tmp_path)
     events, status, _ = runtime.events("run-half", 0)
     types = [item["event"]["type"] for item in events]
     assert status == "interrupted"

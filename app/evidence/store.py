@@ -5,14 +5,19 @@
 ``monitor`` / ``ProductSearchCache`` 的降级方式保持一致。
 """
 
-import json
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 
 from app.api.context import get_session_dir
 from app.evidence.models import EvidenceItem, EvidenceMethod
+from app.utils.jsonl import append_jsonl, iter_jsonl
 
 EVIDENCE_FILENAME = "evidence.jsonl"
+
+
+def _dump_item(item: EvidenceItem) -> dict[str, Any]:
+    return item.model_dump(mode="json")
 
 
 def utc_now() -> str:
@@ -52,10 +57,7 @@ class EvidenceStore:
         return item
 
     def add(self, item: EvidenceItem) -> None:
-        self.path.parent.mkdir(parents=True, exist_ok=True)
-        with self.path.open("a", encoding="utf-8") as fh:
-            fh.write(item.model_dump_json())
-            fh.write("\n")
+        append_jsonl(self.path, _dump_item(item))
 
     def list(
         self,
@@ -65,15 +67,10 @@ class EvidenceStore:
         tool: str | None = None,
     ) -> list[EvidenceItem]:
         """按写入顺序返回证据；损坏行跳过，不阻塞读取。"""
-        if not self.path.exists():
-            return []
         items: list[EvidenceItem] = []
-        for line in self.path.read_text(encoding="utf-8").splitlines():
-            stripped = line.strip()
-            if not stripped:
-                continue
+        for payload in iter_jsonl(self.path):
             try:
-                item = EvidenceItem.model_validate(json.loads(stripped))
+                item = EvidenceItem.model_validate(payload)
             except ValueError:
                 continue
             if field is not None and item.field != field:

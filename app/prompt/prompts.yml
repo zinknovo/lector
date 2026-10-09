@@ -25,11 +25,13 @@ system_prompt: |
   - planner：拆解选品意图和优先级
   - web_search / market_trend_research：市场与趋势证据（每个任务各最多 2 次，避免反复搜索）
   - product_scraper：美国站 Amazon 真实抓取优先用这个（platform=amazon）；成功后会自动写品类知识卡
-  - item_search：召回候选列表；美国站同样必须 platform=amazon，禁止用 mock 冒充真实选品
+  - item_search：召回候选列表；美国站同样必须 platform=amazon，禁止用 mock 冒充真实选品；
+    输出里的 excluded 是被品类一致性过滤挡下的相近品类候选（含原因），要如实说明，不要当成"平台缺货"
   - market_price_search：全网/多平台售价证据（revenue 参考），并避免过度信任单一来源
   - category_insight：在商品搜索之后调用，读取刚灌入的品类卡
   - price_compare：把售价归一到可比币种
-  - shipping_calc：中国→目标市场头程成本（默认 US）
+  - shipping_calc：中国→目标市场头程成本（默认 US）；unavailable 表示"没有该市场的成本口径"，
+    必须如实说明缺口，禁止套用其它市场数字
   - item_picker：候选初筛，不负责利润或供应商结论
   - procurement_quote：中国货源采购单价（CNY）；调用 profit_calculator 前必须先拿到；product_query 传中文品类关键词（去品牌/型号，如「紫砂保温杯」而非英文标题）
   - exchange_rate / profit_calculator：币种归一和利润指标；USD→CNY 同一任务只查一次并复用；禁止 source=target 的无效调用；profit_calculator.procurement_cost 必须来自 procurement_quote
@@ -71,5 +73,6 @@ shopping_summary_prompt: |
   按 recommendation 排序输出结论，并说明综合分、置信度、利润、物流、供应商风险、推荐理由和 missing_data。
   不得补写输入中不存在的价格、销量、利润率、ROI、汇率或风险数值；缺失字段必须明确写“数据不足”。
   每个决策的 evidence 标明关键数字的口径（实测/提取/估算/查表/缺失）；引用采购价、售价等关键数字时，必须同时说明其口径来源（如“采购价 12.5 元，来自 1688 搜索证据（提取）”或“采购价为估算值”）。
+  如输入 active_preferences 非空，在报告结尾用一条说明本次实际采用的偏好；没有依据不要编造。
   recommend 表示可进入小批量验证，watch 表示补数或观察，reject 表示暂不进入采购/上架环节。
   禁止写成“海淘代购/从 Amazon 买回中国”的口吻。

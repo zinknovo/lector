@@ -246,3 +246,53 @@ def test_task_budget_hint_is_injected(monkeypatch) -> None:
         if isinstance(message, SystemMessage) and "预算提示" in str(message.content)
     ]
     assert hints, "越过工具调用预算后应注入收窄范围提示"
+
+
+def test_capped_result_is_saved_in_full_to_session_dir(tmp_path) -> None:
+    """被裁剪的工具结果要把完整原文落到会话目录，并在上下文里给出引用。"""
+    import json as json_module
+
+    from langchain_core.tools import tool
+
+    from app.api.context import thread_scope
+
+    payload_marker = "FULL-PAYLOAD-MARKER"
+
+    @tool
+    def big_search() -> str:
+        """返回大量条目。"""
+        return json_module.dumps(
+            {
+                "items": [
+                    {"id": index, "blob": f"{payload_marker}-{index}-" + "y" * 200}
+                    for index in range(200)
+                ]
+            },
+            ensure_ascii=False,
+        )
+
+    model = RecordingFakeModel(
+        script=[_tool_call("big_search", {}, "c1"), AIMessage(content="done")]
+    )
+    agent = create_agent(
+        model=model,
+        tools=[big_search],
+        middleware=[HarnessMiddleware(enable_drift=False)],
+    )
+    with thread_scope("t-result", tmp_path):
+        asyncio.run(agent.ainvoke({"messages": [HumanMessage(content="查")]}))
+
+    saved = [
+        path
+        for path in tmp_path.iterdir()
+        if path.name.startswith("tool-result-")
+    ]
+    assert len(saved) == 1
+    assert payload_marker in saved[0].read_text(encoding="utf-8")
+
+    tool_message = next(
+        message
+        for message in model.calls[-1]
+        if message.type == "tool"
+    )
+    assert f"完整结果已保存：{saved[0].name}" in str(tool_message.content)

@@ -97,8 +97,6 @@ def _parse_llm_price(raw: str) -> float | None:
 
 def _validate_price_in_text(price: float, text: str) -> bool:
     """交叉验证：LLM 抽出的价格必须在原文中出现过。"""
-    import re
-
     # 搜索 price 整数和小数形式
     patterns = [
         str(int(price)),
@@ -154,6 +152,7 @@ def _record_price_evidence(
     source: str,
     confidence: float,
     evidence: list[str],
+    product_id: str | None = None,
 ) -> None:
     """把本次采购价写进会话证据库；无会话上下文时静默跳过。"""
     if source == "web_search":
@@ -170,6 +169,7 @@ def _record_price_evidence(
         detail=evidence[0] if evidence else "",
         confidence=confidence,
         tool="procurement_quote",
+        product_id=product_id,
     )
 
 
@@ -179,12 +179,16 @@ async def procurement_quote(
     amazon_price_usd: float | None = None,
     amazon_price_cny: float | None = None,
     quantity: int = 100,
+    product_id: str | None = None,
 ) -> ProcurementQuoteOutput:
     """查询货源采购单价（优先 1688/Alibaba 网页证据），供 profit_calculator 使用。
 
     product_query：用于 1688 检索的品类关键词，传中文品类名效果最好
     （如「蓝牙耳机」「紫砂保温杯」）；去掉品牌与型号（如 TOZO NC9、B0H3PSK8LR），
     不要把完整英文标题或促销词原样传入。
+
+    product_id：可选。为具体候选查价时传入该候选的 SKU/ID，证据会绑定到它，
+    决策门禁按商品取用本商品自己的采购置信度。
 
     美国站选品 full_chain 在调用 profit_calculator 之前必须先拿采购成本。
     若网页搜不到可靠报价，会返回基于 Amazon 售价的透明估算（source=retail_ratio_estimate）。
@@ -205,7 +209,10 @@ async def procurement_quote(
 
     # 直接使用模型给出的品类关键词检索；工具不做隐藏改写（关键词由调用方负责，
     # 见工具 docstring 与主提示词对 product_query 的说明）。
-    search_query = f"1688 {product_query} 批发价 拿货价 货源价格"
+    search_query = (
+        f"1688 {product_query} 批发价 拿货价 货源价格 "
+        f"OR alibaba {product_query} wholesale price CNY"
+    )
     search_result: WebSearchOutput = await web_search.ainvoke(
         {"query": search_query, "max_results": 5}
     )
@@ -227,6 +234,7 @@ async def procurement_quote(
                 source="web_search",
                 confidence=0.7 if len(prices) >= 2 else 0.55,
                 evidence=evidence,
+                product_id=product_id,
             )
             return ProcurementQuoteOutput(
                 product_query=product_query,
@@ -253,6 +261,7 @@ async def procurement_quote(
                 source="web_search",
                 confidence=0.55,
                 evidence=evidence,
+                product_id=product_id,
             )
             return ProcurementQuoteOutput(
                 product_query=product_query,
@@ -287,6 +296,7 @@ async def procurement_quote(
             source="retail_ratio_estimate",
             confidence=0.4,
             evidence=evidence,
+            product_id=product_id,
         )
         return ProcurementQuoteOutput(
             product_query=product_query,
@@ -312,6 +322,7 @@ async def procurement_quote(
         source="unavailable",
         confidence=0.0,
         evidence=evidence,
+        product_id=product_id,
     )
     return ProcurementQuoteOutput(
         product_query=product_query,

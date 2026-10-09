@@ -44,7 +44,7 @@ MongoDB 基础镜像使用 AWS Public ECR 中的 Docker Official Image，避免�
 | Frontend | `http://127.0.0.1:5173` | Nginx 静态站点及 API/WS 反向代理 |
 | Gateway | `http://127.0.0.1:8080` | API Key、限流、Prometheus、REST/WS 转发 |
 | Agent | `http://127.0.0.1:8000` | 内部 FastAPI + LangGraph 服务 |
-| MongoDB | `mongodb://127.0.0.1:27017/lector` | Amazon 搜索缓存和结构化品类知识 |
+| MongoDB | `mongodb://127.0.0.1:27017/lector` | Amazon 搜索缓存、结构化品类知识、卖家长期偏好 |
 
 本机已有 MongoDB 时，可在 `.env` 设置 `MONGODB_HOST_PORT=27018`；容器之间的地址和
 端口不受影响。此时从宿主机执行 MongoDB smoke 或使用缓存，还要把 `MONGODB_URL`

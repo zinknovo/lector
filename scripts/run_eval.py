@@ -138,8 +138,6 @@ def main() -> None:
     if args.failures_out:
         failing = [case for case, result in zip(cases, results) if not result["ok"]]
         if failing:
-            import yaml
-
             path = Path(args.failures_out)
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_text(

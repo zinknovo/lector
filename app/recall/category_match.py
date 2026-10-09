@@ -16,6 +16,7 @@ import re
 from dataclasses import dataclass
 
 from app.recall.category_norm import CATEGORY_ALIASES, normalize_category
+from app.utils.text import bigrams
 
 DEFAULT_MIN_OVERLAP = 0.3
 
@@ -42,19 +43,6 @@ def _expand_aliases(text: str) -> str:
     return result
 
 
-def _tokens(text: str) -> set[str]:
-    tokens: set[str] = set()
-    for chunk in re.findall(r"[一-鿿]+|[a-z0-9]+", text.lower()):
-        if _CJK_RE.match(chunk):
-            if len(chunk) >= 2:
-                tokens.update(chunk[i : i + 2] for i in range(len(chunk) - 1))
-            else:
-                tokens.add(chunk)
-        elif len(chunk) >= 3:
-            tokens.add(chunk)
-    return tokens
-
-
 def match_category(
     target: str, text: str, *, min_overlap: float = DEFAULT_MIN_OVERLAP
 ) -> CategoryMatch:
@@ -64,8 +52,8 @@ def match_category(
 
     normalized_target = _expand_aliases(normalize_category(target))
     normalized_text = _expand_aliases(text)
-    target_tokens = _tokens(normalized_target)
-    text_tokens = _tokens(normalized_text)
+    target_tokens = bigrams(normalized_target)
+    text_tokens = bigrams(normalized_text)
     if not target_tokens:
         return CategoryMatch(ok=True, overlap=1.0, reason="目标品类无法拆词，跳过过滤")
 

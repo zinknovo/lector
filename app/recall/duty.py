@@ -39,7 +39,7 @@ def estimate_duty(
     declared_value_cny 应为货值（优先采购成本）；若只有售价，调用方应传入估算货值。
     目的地没有税率口径时抛 ``UnknownDestinationError``——不套用其它市场数字。
     """
-    dest = (destination or "US").upper()
+    dest = destination.strip().upper()
     config = DUTY_BY_DESTINATION.get(dest)
     if config is None:
         raise UnknownDestinationError(dest)

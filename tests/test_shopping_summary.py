@@ -81,3 +81,31 @@ def test_shopping_summary_handles_empty_decisions_without_llm(monkeypatch) -> No
     assert result.decisions == []
     assert result.report == []
     assert "没有可报告" in result.final_text
+
+
+def test_shopping_summary_passes_active_preferences_to_report(monkeypatch) -> None:
+    from app.tools import shopping_summary as module
+
+    captured: dict = {}
+
+    class FakeLLM:
+        async def ainvoke(self, messages):
+            captured["payload"] = json.loads(messages[-1][1])
+            return AIMessage(content="报告正文")
+
+    monkeypatch.setattr(module, "get_llm", lambda: FakeLLM())
+
+    asyncio.run(
+        module.shopping_summary.ainvoke(
+            {
+                "decisions": [_decision().model_dump(mode="json")],
+                "user_query": "美国站卖保温杯",
+                "active_preferences": ["[like] 默认做美国站", "[dislike] 避开塑料"],
+            }
+        )
+    )
+
+    assert captured["payload"]["active_preferences"] == [
+        "[like] 默认做美国站",
+        "[dislike] 避开塑料",
+    ]

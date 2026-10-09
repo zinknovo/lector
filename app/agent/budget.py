@@ -6,8 +6,9 @@
 
 from __future__ import annotations
 
-import os
 from dataclasses import dataclass, field
+
+from app.utils.env import env_int
 
 DEFAULT_TOOL_CALL_BUDGET = 30
 DEFAULT_RESULT_CHAR_BUDGET = 300_000
@@ -18,15 +19,6 @@ BUDGET_HINT = (
     "把重点放在证据核对与结论上。"
 )
 
-
-def _env_int(name: str, default: int) -> int:
-    raw = os.environ.get(name, "").strip()
-    if not raw:
-        return default
-    try:
-        return int(raw)
-    except ValueError:
-        return default
 
 
 @dataclass
@@ -49,12 +41,12 @@ class TaskBudget:
         self.tool_call_budget = (
             tool_call_budget
             if tool_call_budget is not None
-            else _env_int("LECTOR_TASK_TOOL_BUDGET", DEFAULT_TOOL_CALL_BUDGET)
+            else env_int("LECTOR_TASK_TOOL_BUDGET", DEFAULT_TOOL_CALL_BUDGET)
         )
         self.result_char_budget = (
             result_char_budget
             if result_char_budget is not None
-            else _env_int(
+            else env_int(
                 "LECTOR_TASK_RESULT_CHAR_BUDGET", DEFAULT_RESULT_CHAR_BUDGET
             )
         )

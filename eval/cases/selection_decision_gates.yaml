@@ -169,3 +169,43 @@ cases:
       category_semantic_match: true
     expected:
       recommendation: "watch"
+
+  # 证据按商品归属：其它商品更新的高置信度采购价不得覆盖本商品的低置信度证据
+  - id: evidence_is_scoped_to_the_product
+    evidence:
+      - field: procurement_cost_cny
+        value: 30.0
+        method: estimated
+        source: retail_ratio_estimate
+        confidence: 0.40
+        tool: procurement_quote
+        product_id: "A6"
+      - field: procurement_cost_cny
+        value: 12.0
+        method: extracted
+        source: web_search
+        confidence: 0.90
+        tool: procurement_quote
+        product_id: "OTHER"
+    inputs:
+      product_id: "A6"
+      title: "Strong Product 6"
+      platform: "amazon"
+      rating: 4.9
+      review_count: 10000
+      sales: 10000
+      selling_price_cny: 500
+      landed_cost_cny: 200
+      shipping_cost_cny: 20
+      eta_days: 10
+      total_cost_cny: 250
+      net_profit_cny: 250
+      profit_margin: 0.5
+      roi: 1.0
+      supplier_risk_score: 0.1
+      supplier_risk_level: "low"
+      procurement_confidence: 0.90
+      revenue_evidence_confidence: 0.90
+      category_semantic_match: true
+    expected:
+      recommendation: "watch"

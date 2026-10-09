@@ -70,7 +70,8 @@ async def shipping_calc(
 
     declared_value_ratio：用售价估算申报货值的比例（无真实采购价时的 MVP 近似）。
     """
-    destination = (destination or "US").upper()
+    # 参数缺省由签名提供（"US"）；显式传入空白字符串视为"没给目的地"，按下不表口径处理
+    destination = destination.strip().upper()
     ratio = min(max(declared_value_ratio, 0.05), 1.0)
     await monitor.report_tool_start(
         "shipping_calc",

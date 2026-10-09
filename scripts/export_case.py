@@ -25,6 +25,7 @@ sys.path.insert(0, str(ROOT))
 import yaml
 
 from app.security.guards import audit_output
+from app.utils.jsonl import iter_jsonl
 from app.utils.path_utils import OUTPUT_ROOT, validate_thread_id
 
 SIGNAL_EVENTS = {
@@ -52,14 +53,7 @@ def _iter_run_events(session_dir: Path) -> list[dict[str, Any]]:
         return []
     events: list[dict[str, Any]] = []
     for path in sorted(log_dir.glob("*.jsonl")):
-        for line in path.read_text(encoding="utf-8").splitlines():
-            stripped = line.strip()
-            if not stripped:
-                continue
-            try:
-                item = json.loads(stripped)
-            except ValueError:
-                continue
+        for item in iter_jsonl(path):
             if isinstance(item, dict) and isinstance(item.get("event"), dict):
                 events.append(item["event"])
     return events
@@ -131,18 +125,9 @@ def _collect_evidence(session_dir: Path) -> list[dict[str, Any]]:
     path = session_dir / "evidence.jsonl"
     if not path.exists():
         return []
-    items: list[dict[str, Any]] = []
-    for line in path.read_text(encoding="utf-8").splitlines():
-        stripped = line.strip()
-        if not stripped:
-            continue
-        try:
-            item = json.loads(stripped)
-        except ValueError:
-            continue
-        if isinstance(item, dict):
-            items.append(item)
-    return items
+    return [
+        item for item in iter_jsonl(path) if isinstance(item, dict)
+    ]
 
 
 def export_case(

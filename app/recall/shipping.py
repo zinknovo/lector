@@ -36,7 +36,7 @@ def estimate_shipping(
 
     目的地没有成本口径时抛 ``UnknownDestinationError``——不套用其它市场数字。
     """
-    dest = (destination or "US").upper()
+    dest = destination.strip().upper()
     table = OUTBOUND_SHIPPING_TABLE.get(dest)
     if table is None:
         raise UnknownDestinationError(dest)

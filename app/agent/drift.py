@@ -8,8 +8,9 @@
 - ``cost_runaway``    最近三次工具结果体积明显高于此前均值
 
 规则命中只返回一条提示（由调用方注入下一轮输入）并发事件，
-不改写本轮回复；同类信号每会话最多触发一次。按会话隔离，
-一轮选品意图结束后调用 :meth:`DriftDetector.reset`。
+不改写本轮回复；同类信号每会话最多触发一次。状态按会话隔离：
+HarnessMiddleware 在会话开始（``before_agent``）重置并登记目标，
+调用方也可自行调用 :meth:`DriftDetector.reset` 清理。
 """
 
 from __future__ import annotations
@@ -18,7 +19,9 @@ import json
 import re
 from collections import deque
 from dataclasses import dataclass
-from typing import Any, Mapping
+from typing import Any, Literal, Mapping
+
+from app.utils.text import bigrams
 
 _MARKET_US_PATTERN = re.compile(r"美国站|美国|亚马逊|amazon|\bUS\b|美元|USD", re.I)
 _BUDGET_PATTERNS: tuple[re.Pattern[str], ...] = (
@@ -79,27 +82,23 @@ _GOAL_STOPWORDS = {
 }
 
 
+DriftKind = Literal[
+    "constraint_drop", "goal_drift", "empty_streak", "cost_runaway"
+]
+
+
 @dataclass(frozen=True)
 class DriftSignal:
     """一次命中的漂移信号；``hint`` 可直接注入下一轮输入。"""
 
-    kind: str
+    kind: DriftKind
     detail: str
     hint: str
 
 
 def _bigrams(text: str) -> set[str]:
-    """中文按二字组、英文按词切分，用于粗略的语义重合度。"""
-    tokens: set[str] = set()
-    for chunk in re.findall(r"[一-鿿]+|[a-z0-9]+", text.lower()):
-        if re.match(r"[一-鿿]", chunk):
-            if len(chunk) >= 2:
-                tokens.update(chunk[i : i + 2] for i in range(len(chunk) - 1))
-            else:
-                tokens.add(chunk)
-        elif len(chunk) >= 3:
-            tokens.add(chunk)
-    return {token for token in tokens if token not in _GOAL_STOPWORDS}
+    """语义重合度用：切词后过滤目标句里的填充词。"""
+    return {token for token in bigrams(text) if token not in _GOAL_STOPWORDS}
 
 
 def _overlap(goal_tokens: set[str], text: str) -> float:

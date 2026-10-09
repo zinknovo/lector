@@ -3,9 +3,41 @@ import { HttpAgent } from "@ag-ui/client";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { recoveringFetch } from "../lib/recoveringFetch";
+import { readSseFrames } from "../lib/sseStream";
 import type { LectorEvent } from "../types";
 
 const RECONNECT_NOTICE = "事件连接中断，正在恢复已保存的进度";
+const STORAGE_KEY = "lector.active-run";
+
+function readStoredRun(): { threadId: string; runId: string } | null {
+  try {
+    const raw = sessionStorage.getItem(STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as { threadId?: unknown; runId?: unknown };
+    if (typeof parsed.threadId === "string" && typeof parsed.runId === "string") {
+      return { threadId: parsed.threadId, runId: parsed.runId };
+    }
+  } catch {
+    // 存储不可用或内容损坏：按没有进行中的会话处理
+  }
+  return null;
+}
+
+function writeStoredRun(threadId: string, runId: string): void {
+  try {
+    sessionStorage.setItem(STORAGE_KEY, JSON.stringify({ threadId, runId }));
+  } catch {
+    // 忽略存储失败（隐私模式等），不影响本轮运行
+  }
+}
+
+function clearStoredRun(): void {
+  try {
+    sessionStorage.removeItem(STORAGE_KEY);
+  } catch {
+    // 同上
+  }
+}
 
 function lastAssistantText(event: BaseEvent): string | null {
   const messages = (event as { messages?: unknown }).messages;
@@ -26,6 +58,7 @@ export function useLectorTask() {
   const threadIdRef = useRef<string | null>(null);
   const noticeRef = useRef<string | null>(null);
   const mountedRef = useRef(true);
+  const resumeControllerRef = useRef<AbortController | null>(null);
 
   const pushEvent = useCallback(
     (type: string, event: string, message: string, data: Record<string, unknown>) => {
@@ -122,6 +155,7 @@ export function useLectorTask() {
       const runId = crypto.randomUUID();
       threadIdRef.current = thread;
       setThreadId(thread);
+      writeStoredRun(thread, runId);
       runIdRef.current = runId;
       setRunning(true);
 
@@ -167,6 +201,8 @@ export function useLectorTask() {
 
   const resetSession = useCallback(() => {
     agentRef.current?.abortRun();
+    resumeControllerRef.current?.abort();
+    clearStoredRun();
     threadIdRef.current = null;
     runIdRef.current = null;
     setThreadId(null);
@@ -187,13 +223,50 @@ export function useLectorTask() {
     setRunning(false);
   }, []);
 
-  useEffect(
-    () => () => {
+  /** 刷新后按存储的 runId 重放事件日志（完成/进行中的运行都会重新渲染）。 */
+  const resumeFromStorage = useCallback(async () => {
+    const saved = readStoredRun();
+    if (!saved) return;
+    threadIdRef.current = saved.threadId;
+    runIdRef.current = saved.runId;
+    setThreadId(saved.threadId);
+    setRunning(true);
+    const controller = new AbortController();
+    resumeControllerRef.current = controller;
+    try {
+      const response = await fetch(
+        `/ag-ui/runs/${encodeURIComponent(saved.runId)}/events?after=0`,
+        { signal: controller.signal, headers: { Accept: "text/event-stream" } },
+      );
+      if (response.status === 404) {
+        // 日志不在了（已清理或不同实例）：清掉恢复状态，按新会话处理
+        clearStoredRun();
+        threadIdRef.current = null;
+        runIdRef.current = null;
+        if (mountedRef.current) setThreadId(null);
+        return;
+      }
+      await readSseFrames(
+        response,
+        ({ event }) => handleAguiEvent(event as unknown as BaseEvent),
+        controller.signal,
+      );
+    } catch {
+      // 断网或被中止：保留已恢复的内容
+    } finally {
+      resumeControllerRef.current = null;
+      if (mountedRef.current) setRunning(false);
+    }
+  }, [handleAguiEvent]);
+
+  useEffect(() => {
+    void resumeFromStorage();
+    return () => {
       mountedRef.current = false;
       agentRef.current?.abortRun();
-    },
-    [],
-  );
+      resumeControllerRef.current?.abort();
+    };
+  }, [resumeFromStorage]);
 
   return {
     threadId,

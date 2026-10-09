@@ -18,7 +18,8 @@ class UnknownDestinationError(ValueError):
     """该目的地没有成本口径：明确失败，不套用其它市场的数字。"""
 
     def __init__(self, destination: str) -> None:
-        super().__init__(f"没有 {destination} 的成本口径（成本表未配置该市场）")
+        label = destination.strip() or "（空）"
+        super().__init__(f"没有 {label} 的成本口径（成本表未配置该市场；空白目的地不会按默认市场静默处理）")
         self.destination = destination
 
 

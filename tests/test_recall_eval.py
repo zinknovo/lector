@@ -7,7 +7,7 @@ from pathlib import Path
 import yaml
 
 from scripts.eval.metrics import check_gates
-from scripts.run_recall_eval import _load_cards, build_store, run_queries
+from scripts.run_recall_eval import _load_cards, build_store, run_queries, summarize
 
 CASES_PATH = Path("eval/cases/category_recall.yaml")
 CARDS_PATH = Path("eval/fixtures/category_cards_eval.jsonl")
@@ -17,15 +17,7 @@ def _run() -> dict:
     cases = yaml.safe_load(CASES_PATH.read_text(encoding="utf-8"))
     store = build_store(_load_cards(CARDS_PATH))
     results = asyncio.run(run_queries(cases, store))
-    ranked = [row for row in results if row["relevant"]]
-    metrics = {
-        name: sum(row[name] for row in ranked) / len(ranked)
-        for name in ("recall@k", "mrr", "ndcg@k")
-    }
-    metrics["no_result_accuracy"] = sum(
-        row["no_result_accuracy"] for row in results
-    ) / len(results)
-    return {"results": results, "metrics": metrics}
+    return {"results": results, "metrics": summarize(results)}
 
 
 def test_recall_eval_passes_gates() -> None:
@@ -56,3 +48,34 @@ def test_aliases_normalize_to_standard_categories() -> None:
     assert normalize_category("U型枕") == "颈枕"
     assert normalize_category("马克杯") == "咖啡杯"
     assert normalize_category(" 水杯 ") == "保温杯"
+
+
+def test_forbidden_ids_are_never_returned() -> None:
+    """回归集里的禁区卡片（相近品类）不得出现在结果里。"""
+    report = _run()
+    for row in report["results"]:
+        assert row["forbidden_hits"] == [], row
+    assert report["metrics"].get("forbidden_leak_rate", 0.0) == 0.0
+
+
+def test_leak_is_detected_when_forbidden_card_is_returned() -> None:
+    """机制自检：故意把必然召回的卡片列为禁区时，运行器要报泄漏。"""
+    import asyncio
+
+    from scripts.run_recall_eval import _load_cards, build_store, run_queries
+
+    cases = {
+        "k": 5,
+        "queries": [
+            {
+                "id": "planted-leak",
+                "query": "保温杯",
+                "relevant": {"thermos-bestseller": 3},
+                "forbidden": ["thermos-bestseller"],
+            }
+        ],
+    }
+    store = build_store(_load_cards(CARDS_PATH))
+    rows = asyncio.run(run_queries(cases, store))
+    assert rows[0]["forbidden_hits"] == ["thermos-bestseller"]
+    assert rows[0]["ok"] is False

@@ -13,6 +13,8 @@ Lector 是基于 FastAPI、LangGraph 和 LangChain 构建的电商选品 Agent�
 - `MockProductDataSource`：25 条跨品类数据，本地和 CI 默认可用。
 - `ApifyAmazonDataSource`：通过 `automation-lab/amazon-scraper` 获取 Amazon 商品。
 - `ProductSearchCache`：可选 MongoDB 缓存，默认 TTL 7 天；连接不可用时静默降级。
+- 长期偏好（可选）：MongoDB `buyer_preferences`，`remember_preference` /
+  `forget_preference` 工具读写；读取失败降级为无偏好，保存失败明确报错。
 
 ## 安装
 
@@ -83,8 +85,8 @@ Demo 使用 Mock 商品完成趋势发现、候选筛选、利润测算、供应
 工具边界与轮次边界的护栏由 LangChain 原生 `AgentMiddleware` 承载（`app/agent/harness.py`）：
 
 - **工具返回后**：L3 注入过滤（命中片段替换为占位符）→ 结果体积治理（结构化裁剪，
-  保持 JSON 合法）→ 循环检测（同工具 + 同参数 + 同结果指纹，默认窗口 6、阈值 3）
-  → 漂移观察
+  保持 JSON 合法；超限时**完整原文落盘到会话目录并在结果里给出可下载引用**）
+  → 循环检测（同工具 + 同参数 + 同结果指纹，默认窗口 6、阈值 3）→ 漂移观察
 - **模型调用前**：压缩旧工具结果（决策 / 报告消息受保护，证据类结果放宽阈值），
   并注入上一轮排队的收敛 / 漂移提示
 - **会话结束**：最终回复过 L4 输出脱敏（密钥、数据库地址、本机路径）
@@ -217,7 +219,7 @@ docker compose up --build
 
 服务入口：前端 `http://127.0.0.1:5173`，Java 网关 `http://127.0.0.1:8080`，
 内部 Python Agent `http://127.0.0.1:8000`。MongoDB 由 Compose 启动，同时存储
-Amazon 搜索缓存和结构化品类知识。默认栈共四个服务：MongoDB、Agent、Gateway、Frontend。
+Amazon 搜索缓存、结构化品类知识卡与卖家长期偏好（`buyer_preferences`）。默认栈共四个服务：MongoDB、Agent、Gateway、Frontend。
 
 完整部署、严格外部检查和报告导出命令见
 [`docs/production-readiness.md`](docs/production-readiness.md)。

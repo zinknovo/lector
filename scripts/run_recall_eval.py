@@ -118,14 +118,19 @@ async def run_queries(
     results: list[dict[str, Any]] = []
     for query in cases["queries"]:
         relevant = {str(key): int(value) for key, value in (query.get("relevant") or {}).items()}
+        forbidden = {str(item) for item in (query.get("forbidden") or [])}
         cards = await store.search(str(query["query"]), limit=k)
         retrieved = [card.card_id for card in cards]
         expect_no_result = bool(query.get("expect_no_result", False))
+        leaked = sorted(set(retrieved) & forbidden)
         row: dict[str, Any] = {
             "id": query.get("id"),
             "query": query["query"],
             "retrieved": retrieved,
             "relevant": relevant,
+            "forbidden": sorted(forbidden),
+            "forbidden_hits": leaked,
+            "leak_rate": 1.0 if leaked else 0.0,
             "recall@k": recall_at_k(retrieved, relevant, k),
             "mrr": reciprocal_rank(retrieved, relevant),
             "ndcg@k": ndcg_at_k(retrieved, relevant, k),
@@ -135,6 +140,7 @@ async def run_queries(
         }
         row["ok"] = (
             row["no_result_accuracy"] == 1.0
+            and not leaked
             and (
                 not relevant
                 or row["recall@k"] == 1.0
@@ -142,6 +148,30 @@ async def run_queries(
         )
         results.append(row)
     return results
+
+
+def summarize(results: list[dict[str, Any]]) -> dict[str, float]:
+    """聚合指标：排序类只看有期望命中的查询，空结果与禁区泄漏按全体计算。"""
+    ranked_rows = [row for row in results if row["relevant"]]
+    metrics = aggregate(
+        [
+            {
+                "recall@k": row["recall@k"],
+                "mrr": row["mrr"],
+                "ndcg@k": row["ndcg@k"],
+            }
+            for row in ranked_rows
+        ]
+    )
+    metrics["no_result_accuracy"] = (
+        sum(row["no_result_accuracy"] for row in results) / len(results)
+        if results
+        else 1.0
+    )
+    metrics["forbidden_leak_rate"] = (
+        sum(row["leak_rate"] for row in results) / len(results) if results else 0.0
+    )
+    return metrics
 
 
 def main() -> None:
@@ -161,23 +191,7 @@ def main() -> None:
     store = build_store(_load_cards(args.cards))
     results = asyncio.run(run_queries(cases, store))
 
-    # 排序类指标只对有期望命中的查询取均值；空结果查询单独用准确率口径。
-    ranked_rows = [row for row in results if row["relevant"]]
-    metrics = aggregate(
-        [
-            {
-                "recall@k": row["recall@k"],
-                "mrr": row["mrr"],
-                "ndcg@k": row["ndcg@k"],
-            }
-            for row in ranked_rows
-        ]
-    )
-    metrics["no_result_accuracy"] = (
-        sum(row["no_result_accuracy"] for row in results) / len(results)
-        if results
-        else 1.0
-    )
+    metrics = summarize(results)
     gate_failures = check_gates(metrics, cases.get("gates") or {})
     failed_queries = [row for row in results if not row["ok"]]
 
