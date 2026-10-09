@@ -23,6 +23,8 @@ from app.memory.store import (
     PreferenceStoreError,
     store,
 )
+from app.observability.tracing import configure_tracing
+from app.observability.tracing import span as tracing_span
 from app.security.guards import audit_output
 from app.utils.path_utils import ensure_session_dir
 
@@ -123,6 +125,7 @@ async def run_agent(
     user_id: str | None = None,
 ) -> dict[str, Any]:
     """主 AgentLoop 的入口。"""
+    configure_tracing()
     session_dir = ensure_session_dir(thread_id)
     set_thread_context(thread_id, session_dir)
     set_user_context(user_id)
@@ -137,7 +140,11 @@ async def run_agent(
 
     async with open_checkpointer(session_dir) as checkpointer:
         agent = _build_main_agent(prompt, checkpointer=checkpointer)
-        result = await _invoke_with_limits(agent, query, thread_id)
+        with tracing_span("agent.run", {"thread.id": thread_id}) as current_span:
+            result = await _invoke_with_limits(agent, query, thread_id)
+            current_span.set_attribute(
+                "agent.outcome", "ok" if result is not None else "incomplete"
+            )
     if result is None:
         return {"status": "incomplete", "thread_id": thread_id}
 

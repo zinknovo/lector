@@ -22,6 +22,8 @@ dependencies = [
     "reportlab>=4.4.0",
     "ag-ui-protocol==0.1.22",
     "langgraph-checkpoint-sqlite>=3.1.1",
+    "opentelemetry-sdk>=1.45.1",
+    "opentelemetry-exporter-otlp-proto-http>=1.45.1",
 ]
 
 [dependency-groups]

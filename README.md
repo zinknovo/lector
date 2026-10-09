@@ -102,6 +102,18 @@ Demo 使用 Mock 商品完成趋势发现、候选筛选、利润测算、供应
   `LECTOR_TASK_TOOL_BUDGET`（默认 30）/ `LECTOR_TASK_RESULT_CHAR_BUDGET`（默认 300000）
   时，注入一次"收窄查询范围"提示（不换模型、不阻断）。
 
+## 可观测性（可选）
+
+配置任一即启用 OTLP 追踪；全部留空时保持零开销 no-op：
+
+- `OTEL_EXPORTER_OTLP_ENDPOINT`（可选 `OTEL_EXPORTER_OTLP_TRACES_HEADERS`，`k=v` 逗号分隔）；
+- 或 Langfuse 三项：`LANGFUSE_BASE_URL` + `LANGFUSE_PUBLIC_KEY` + `LANGFUSE_SECRET_KEY`
+  （自动派生 OTLP 地址与 Basic 认证头）。
+
+追踪包含 `agent.run`（thread）、`tool.call`（工具名 / 耗时 / 状态 / 熔断标记）与
+`llm.call`（可用时记录 usage）；只记录这些结构化字段，**不导出 prompt、工具结果或
+报告正文**。导出失败只记日志，不阻断任务。
+
 ## 会话与恢复
 
 同一会话（thread）的状态持久化在会话目录：

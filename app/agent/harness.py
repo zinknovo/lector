@@ -24,6 +24,8 @@ from app.agent.drift import DriftDetector
 from app.agent.middleware import LoopDetector, cap_tool_result, post_step_compress
 from app.api.context import get_thread_id
 from app.api.monitor import monitor
+from app.observability.tracing import record_usage
+from app.observability.tracing import span as tracing_span
 from app.security.guards import sanitize_tool_output
 
 _DEFAULT_SESSION = "default"
@@ -106,10 +108,37 @@ class HarnessMiddleware(AgentMiddleware):
         request: ToolCallRequest,
         handler: Callable[[ToolCallRequest], Any],
     ) -> Any:
+        import time as _time
+
         tool_name = str(request.tool_call.get("name", ""))
         arguments = request.tool_call.get("args", {})
         session_id = get_thread_id() or _DEFAULT_SESSION
+        started_at = _time.perf_counter()
 
+        with tracing_span(
+            "tool.call", {"tool.name": tool_name, "thread.id": session_id}
+        ) as span_handle:
+            return await self._run_tool(
+                request,
+                handler,
+                tool_name=tool_name,
+                arguments=arguments,
+                session_id=session_id,
+                started_at=started_at,
+                span_handle=span_handle,
+            )
+
+    async def _run_tool(
+        self,
+        request: ToolCallRequest,
+        handler: Callable[[ToolCallRequest], Any],
+        *,
+        tool_name: str,
+        arguments: Any,
+        session_id: str,
+        started_at: float,
+        span_handle: Any,
+    ) -> Any:
         if self._enable_breaker:
             allowed, remaining = self._breaker.allow(session_id, tool_name)
             if not allowed:
@@ -118,6 +147,7 @@ class HarnessMiddleware(AgentMiddleware):
                     f"{tool_name} 连续失败后已暂停调用（约剩 {int(remaining)}s）",
                     {"tool": tool_name, "remaining_seconds": int(remaining)},
                 )
+                span_handle.set_attribute("tool.rejected", "circuit_open")
                 return ToolMessage(
                     content=(
                         f"[error] 工具暂时不可用（熔断中，约剩 {int(remaining)}s）："
@@ -180,6 +210,16 @@ class HarnessMiddleware(AgentMiddleware):
                     {"kind": signal.kind, "detail": signal.detail, "tool": tool_name},
                 )
 
+        import time as _time
+
+        span_handle.set_attribute(
+            "tool.duration_ms", int((_time.perf_counter() - started_at) * 1000)
+        )
+        span_handle.set_attribute(
+            "tool.status",
+            "error" if text.lstrip().startswith("[error]") else "success",
+        )
+
         if self._enable_breaker:
             change = self._breaker.record(
                 session_id,
@@ -234,6 +274,22 @@ class HarnessMiddleware(AgentMiddleware):
         ):
             return None
         return {"messages": new_messages}
+
+    # -- 模型调用 ---------------------------------------------------------
+
+    async def awrap_model_call(
+        self,
+        request: Any,
+        handler: Callable[[Any], Any],
+    ) -> Any:
+        with tracing_span("llm.call") as span_handle:
+            response = await handler(request)
+            messages = getattr(response, "result", None)
+            if messages is None and hasattr(response, "usage_metadata"):
+                messages = [response]
+            if isinstance(messages, list):
+                record_usage(span_handle, messages)
+            return response
 
     # -- 会话开始 ---------------------------------------------------------
 
