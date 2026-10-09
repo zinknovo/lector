@@ -1,10 +1,11 @@
 """Select a small set of products from landed-cost candidates."""
 
 import time
-from typing import Literal
 
 from langchain_core.tools import tool
 from pydantic import BaseModel, Field
+
+from app.tools.exclusions import ExcludedCandidate
 
 from app.api.monitor import monitor
 from app.tools.category_insight import CategoryInsightOutput
@@ -19,15 +20,6 @@ class PickedItem(BaseModel):
     score: float
     reasons: list[str] = Field(default_factory=list)
     flags: list[str] = Field(default_factory=list)
-
-
-class ExcludedCandidate(BaseModel):
-    """被排除的候选及其原因（卖家可据此复核筛选口径）。"""
-
-    item_id: str
-    platform: str
-    reason_code: Literal["preference_hard_fail", "not_top_n"]
-    reason: str
 
 
 class ItemPickerOutput(BaseModel):
