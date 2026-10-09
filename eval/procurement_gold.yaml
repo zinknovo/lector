@@ -1,0 +1,14 @@
+# 采购价金标：人工维护的「品类 → 合理采购价区间」。
+#
+# 用途：uv run python scripts/run_procurement_eval.py
+# 口径：命中 = 返回价格落在 [price_min, price_max] 且 source ∈ acceptable_sources。
+# 说明：区间应按真实 1688/工厂报价维护（要写明来源与时间），不要凭空填写；
+#       首次使用先补至少一条样本，脚本会自动做结构自检。
+#
+# samples:
+#   - category: 蓝牙耳机
+#     price_min: 20
+#     price_max: 60
+#     acceptable_sources: [web_search, retail_ratio_estimate]
+#     note: "2026-10 按 1688 搜索样本整理，用于回归观察"
+samples: []

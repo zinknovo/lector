@@ -146,6 +146,12 @@ uv run python scripts/run_recall_eval.py
 uv run pytest tests/test_eval_harness.py tests/test_recall_eval.py -q
 ```
 
+采购价命中率（金标需人工维护，运行会产生真实搜索与模型调用）：
+
+```bash
+uv run python scripts/run_procurement_eval.py   # 空金标会明确提示先补样本（退出码 2）
+```
+
 失败回流（教程 18 的最小闭环）：
 
 ```bash
