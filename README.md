@@ -202,8 +202,12 @@ docker compose up --build
 成本模型说明：
 
 - 头程/税率分档由 `shipping_calc` 使用：`app/recall/shipping.py` + `app/recall/duty.py`
-- 默认表写在 `data/cost_tables.json`
-- 可通过 `LECTOR_COST_TABLES_PATH=/path/to/cost_tables.json` 覆盖（例如你们后续扩展到 CA/UK/EU 等目的地时）
+- 默认表写在 `data/cost_tables.json`（按目的地分组：US / UK / DE / JP / CN），
+  其中 `META` 记录表版本、更新时间与各目的地的校准状态，证据 detail 会带上这些口径
+- **缺失目的地不再回落 US**：没有配置分组的市场会让该候选进入 `shipping_calc.unavailable`
+  （写明原因，证据记为 missing），而不是套用其它市场的数字
+- 新增一个市场 = 在两张表里增加分组 + 在 `META.calibration` 标注来源，代码不改
+- 可通过 `LECTOR_COST_TABLES_PATH=/path/to/cost_tables.json` 覆盖（例如你们后续扩展到 CA/EU 等目的地时）
 
 服务入口：前端 `http://127.0.0.1:5173`，Java 网关 `http://127.0.0.1:8080`，
 内部 Python Agent `http://127.0.0.1:8000`。MongoDB 由 Compose 启动，同时存储

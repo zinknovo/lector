@@ -2,7 +2,7 @@
 
 from typing import Literal
 
-from app.recall.cost_tables import load_duty_tables
+from app.recall.cost_tables import UnknownDestinationError, load_duty_tables
 
 # destination → (rate, tier)；税率作用在申报货值上
 DUTY_BY_DESTINATION_DEFAULT: dict[
@@ -37,10 +37,11 @@ def estimate_duty(
     """估算进口侧关税参考金额。
 
     declared_value_cny 应为货值（优先采购成本）；若只有售价，调用方应传入估算货值。
+    目的地没有税率口径时抛 ``UnknownDestinationError``——不套用其它市场数字。
     """
     dest = (destination or "US").upper()
-    if dest in DUTY_BY_DESTINATION:
-        rate, tier = DUTY_BY_DESTINATION[dest]
-    else:
-        rate, tier = DUTY_TABLE.get(platform, DUTY_BY_DESTINATION["US"])
+    config = DUTY_BY_DESTINATION.get(dest)
+    if config is None:
+        raise UnknownDestinationError(dest)
+    rate, tier = config
     return round(declared_value_cny * rate, 2), tier

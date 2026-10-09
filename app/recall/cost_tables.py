@@ -14,6 +14,27 @@ from pathlib import Path
 from typing import Any
 
 
+class UnknownDestinationError(ValueError):
+    """该目的地没有成本口径：明确失败，不套用其它市场的数字。"""
+
+    def __init__(self, destination: str) -> None:
+        super().__init__(f"没有 {destination} 的成本口径（成本表未配置该市场）")
+        self.destination = destination
+
+
+COST_TABLE_META_DEFAULT: dict[str, Any] = {
+    "table_version": "v1.0",
+    "updated_at": "2026-07-16",
+    "calibration": {
+        "US": "主路径（v1 默认口径）",
+        "UK": "粗估（未细调）",
+        "DE": "粗估（未细调）",
+        "JP": "粗估（未细调）",
+        "CN": "仅兼容（选品主路径不应使用）",
+    },
+}
+
+
 def _default_cost_tables_path() -> Path:
     # app/recall/cost_tables.py -> app/recall -> app -> project root
     root = Path(__file__).resolve().parents[2]
@@ -44,6 +65,27 @@ def load_cost_tables() -> dict[str, Any]:
     except Exception:
         # Never hard-fail for MVP; fallback to code defaults.
         return {}
+
+
+def load_cost_tables_meta() -> dict[str, Any]:
+    """成本表版本 / 更新时间 / 各目的地校准状态（缺失时用代码默认）。"""
+    data = load_cost_tables()
+    raw = data.get("META")
+    if not isinstance(raw, dict):
+        return COST_TABLE_META_DEFAULT
+    merged = dict(COST_TABLE_META_DEFAULT)
+    merged.update({key: value for key, value in raw.items() if value})
+    return merged
+
+
+def destination_calibration(destination: str) -> str:
+    """该目的地的校准状态文案（未知目的地也给出统一说明）。"""
+    calibration = load_cost_tables_meta().get("calibration") or {}
+    if isinstance(calibration, dict):
+        value = calibration.get(destination.upper())
+        if isinstance(value, str) and value:
+            return value
+    return "未标注校准状态"
 
 
 def load_outbound_shipping_table(

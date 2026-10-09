@@ -4,11 +4,16 @@ import time
 from typing import Literal
 
 from langchain_core.tools import tool
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from app.api.monitor import monitor
 from app.evidence.models import EvidenceMethod
 from app.evidence.store import record_evidence
+from app.recall.cost_tables import (
+    UnknownDestinationError,
+    destination_calibration,
+    load_cost_tables_meta,
+)
 from app.recall.duty import estimate_duty
 from app.recall.shipping import estimate_shipping
 from app.tools.price_compare import PricePoint
@@ -31,9 +36,17 @@ class LandedCost(BaseModel):
     weight_kg: float | None = None
 
 
+class UnavailableItem(BaseModel):
+    """该目的地没有成本口径、无法估算的候选（明确原因，不套用其它市场数字）。"""
+
+    item_id: str
+    reason: str
+
+
 class ShippingCalcOutput(BaseModel):
     destination: str
     items: list[LandedCost]
+    unavailable: list[UnavailableItem] = Field(default_factory=list)
 
 
 def _weight_kg(point: PricePoint) -> float:
@@ -52,7 +65,8 @@ async def shipping_calc(
     - points.price_cny：目标市场售价参考
     - shipping_cny / duty_cny：头程成本，供 profit_calculator.shipping_cost 使用
     - landed_cny：仅 = 运费 + 关税（不含售价、不含采购价）
-    - destination：默认 US；美国站选品必须用 US，禁止默认成 CN
+    - destination：默认 US；美国站选品必须用 US，禁止默认成 CN；
+      目的地没有成本口径时，该候选进入 unavailable（写明原因），**不套用其它市场数字**
 
     declared_value_ratio：用售价估算申报货值的比例（无真实采购价时的 MVP 近似）。
     """
@@ -68,15 +82,31 @@ async def shipping_calc(
     t0 = time.time()
 
     landed: list[LandedCost] = []
+    unavailable: list[UnavailableItem] = []
     for p in points:
         weight = _weight_kg(p)
-        shipping_cny, eta = estimate_shipping(
-            weight, p.platform, destination=destination
-        )
-        declared = round(p.price_cny * ratio, 2)
-        duty_cny, duty_tier = estimate_duty(
-            declared, p.platform, destination=destination
-        )
+        try:
+            shipping_cny, eta = estimate_shipping(
+                weight, p.platform, destination=destination
+            )
+            declared = round(p.price_cny * ratio, 2)
+            duty_cny, duty_tier = estimate_duty(
+                declared, p.platform, destination=destination
+            )
+        except UnknownDestinationError as exc:
+            unavailable.append(
+                UnavailableItem(item_id=p.item_id, reason=str(exc))
+            )
+            record_evidence(
+                field="landed_cost_cny",
+                value=None,
+                method=EvidenceMethod.MISSING,
+                source="cost_tables",
+                detail=f"destination={destination}（无该市场成本口径）",
+                tool="shipping_calc",
+                product_id=p.item_id,
+            )
+            continue
         outbound = round(shipping_cny + duty_cny, 2)
         landed.append(
             LandedCost(
@@ -97,6 +127,8 @@ async def shipping_calc(
 
     landed.sort(key=lambda x: x.landed_cny)
 
+    table_meta = load_cost_tables_meta()
+    calibration = destination_calibration(destination)
     for cost in landed:
         record_evidence(
             field="landed_cost_cny",
@@ -106,10 +138,13 @@ async def shipping_calc(
             detail=(
                 f"destination={destination} | 运费 {cost.shipping_cny} + "
                 f"关税 {cost.duty_cny}（{cost.duty_tier}） | eta {cost.eta_days}d"
+                f" | 成本表 {table_meta.get('table_version', '未知')}（{calibration}）"
             ),
             tool="shipping_calc",
             product_id=cost.item_id,
         )
 
     await monitor.report_tool_end("shipping_calc", int((time.time() - t0) * 1000))
-    return ShippingCalcOutput(destination=destination, items=landed)
+    return ShippingCalcOutput(
+        destination=destination, items=landed, unavailable=unavailable
+    )

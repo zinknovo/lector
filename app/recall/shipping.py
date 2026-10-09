@@ -1,6 +1,6 @@
 """按目的地 + 重量分档的卖家头程运费表（中国发往目标市场，CNY/件）。"""
 
-from app.recall.cost_tables import load_outbound_shipping_table
+from app.recall.cost_tables import UnknownDestinationError, load_outbound_shipping_table
 
 # destination ISO → [(min_weight_kg, fee_cny, eta_days), ...]
 # 默认按海运/经济头程粗估，不是消费者国际快递。
@@ -32,9 +32,14 @@ def estimate_shipping(
     platform: str = "amazon",
     destination: str = "US",
 ) -> tuple[float, int]:
-    """估算中国货源发往目标市场的头程运费与时效。"""
+    """估算中国货源发往目标市场的头程运费与时效。
+
+    目的地没有成本口径时抛 ``UnknownDestinationError``——不套用其它市场数字。
+    """
     dest = (destination or "US").upper()
-    table = OUTBOUND_SHIPPING_TABLE.get(dest) or OUTBOUND_SHIPPING_TABLE["US"]
+    table = OUTBOUND_SHIPPING_TABLE.get(dest)
+    if table is None:
+        raise UnknownDestinationError(dest)
     # platform 参数保留兼容，目的地优先
     del platform
     fee, eta = table[0][1], table[0][2]
