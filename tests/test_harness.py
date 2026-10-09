@@ -183,3 +183,66 @@ def test_sanitize_keeps_normal_product_text() -> None:
     hit, text = sanitize_tool_output("便携颈枕 99 元，支持直邮美国")
     assert hit is False
     assert text == "便携颈枕 99 元，支持直邮美国"
+
+
+def test_tool_circuit_opens_after_consecutive_failures() -> None:
+    calls = {"count": 0}
+
+    @tool
+    def flaky_search(keyword: str) -> str:
+        """总是失败的检索。"""
+        calls["count"] += 1
+        return "[error] dependency failed"
+
+    calls_model = RecordingFakeModel(
+        script=[
+            _tool_call("flaky_search", {"keyword": "a"}, "c1"),
+            _tool_call("flaky_search", {"keyword": "a"}, "c2"),
+            _tool_call("flaky_search", {"keyword": "a"}, "c3"),
+            _tool_call("flaky_search", {"keyword": "a"}, "c4"),
+            AIMessage(content="结束"),
+        ]
+    )
+    agent = create_agent(
+        model=calls_model,
+        tools=[flaky_search],
+        middleware=[HarnessMiddleware(enable_drift=False)],
+    )
+    asyncio.run(agent.ainvoke({"messages": [HumanMessage(content="查")]}))
+
+    # 第四次调用被熔断拦截：工具本体只应执行 3 次
+    assert calls["count"] == 3
+    last_call_messages = calls_model.calls[-1]
+    tool_errors = [
+        str(message.content)
+        for message in last_call_messages
+        if message.type == "tool" and "熔断" in str(message.content)
+    ]
+    assert tool_errors, "熔断拒绝应作为工具错误返回给模型"
+
+
+def test_task_budget_hint_is_injected(monkeypatch) -> None:
+    monkeypatch.setenv("LECTOR_TASK_TOOL_BUDGET", "1")
+    monkeypatch.setenv("LECTOR_TASK_RESULT_CHAR_BUDGET", "1000000")
+
+    @tool
+    def small_search(keyword: str) -> str:
+        """小结果检索。"""
+        return '{"items": [1]}'
+
+    calls = _run_agent(
+        tools=[small_search],
+        script=[
+            _tool_call("small_search", {"keyword": "a"}, "c1"),
+            _tool_call("small_search", {"keyword": "b"}, "c2"),
+            AIMessage(content="结束"),
+        ],
+        middleware=HarnessMiddleware(enable_drift=False),
+    )
+    final_call = calls[-1]
+    hints = [
+        message
+        for message in final_call
+        if isinstance(message, SystemMessage) and "预算提示" in str(message.content)
+    ]
+    assert hints, "越过工具调用预算后应注入收窄范围提示"

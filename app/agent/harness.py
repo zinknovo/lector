@@ -18,6 +18,8 @@ from langchain.agents.middleware import AgentMiddleware
 from langchain.agents.middleware.types import ToolCallRequest
 from langchain_core.messages import HumanMessage, SystemMessage, ToolMessage
 
+from app.agent.breaker import ToolCircuitBreaker
+from app.agent.budget import TaskBudget
 from app.agent.drift import DriftDetector
 from app.agent.middleware import LoopDetector, cap_tool_result, post_step_compress
 from app.api.context import get_thread_id
@@ -76,14 +78,22 @@ class HarnessMiddleware(AgentMiddleware):
         *,
         enable_drift: bool = True,
         enable_content_filter: bool = True,
+        enable_breaker: bool = True,
+        enable_budget: bool = True,
         loop_detector: LoopDetector | None = None,
         drift_detector: DriftDetector | None = None,
+        breaker: ToolCircuitBreaker | None = None,
+        task_budget: TaskBudget | None = None,
     ) -> None:
         super().__init__()
         self._enable_drift = enable_drift
         self._enable_content_filter = enable_content_filter
+        self._enable_breaker = enable_breaker
+        self._enable_budget = enable_budget
         self._loop = loop_detector or LoopDetector()
         self._drift = drift_detector or DriftDetector()
+        self._breaker = breaker or ToolCircuitBreaker()
+        self._budget = task_budget or TaskBudget()
         self._pending_hints: dict[str, list[str]] = {}
 
     # -- 工具返回后 -------------------------------------------------------
@@ -99,6 +109,25 @@ class HarnessMiddleware(AgentMiddleware):
         tool_name = str(request.tool_call.get("name", ""))
         arguments = request.tool_call.get("args", {})
         session_id = get_thread_id() or _DEFAULT_SESSION
+
+        if self._enable_breaker:
+            allowed, remaining = self._breaker.allow(session_id, tool_name)
+            if not allowed:
+                await monitor.report_event(
+                    "tool_circuit_open",
+                    f"{tool_name} 连续失败后已暂停调用（约剩 {int(remaining)}s）",
+                    {"tool": tool_name, "remaining_seconds": int(remaining)},
+                )
+                return ToolMessage(
+                    content=(
+                        f"[error] 工具暂时不可用（熔断中，约剩 {int(remaining)}s）："
+                        f"{tool_name} 连续失败已暂停。请改用其他工具或稍后重试，"
+                        "不要重复调用。"
+                    ),
+                    tool_call_id=str(request.tool_call.get("id", "")),
+                    name=tool_name,
+                )
+
         result = await handler(request)
         if not isinstance(result, ToolMessage):
             return result
@@ -149,6 +178,33 @@ class HarnessMiddleware(AgentMiddleware):
                     "drift_signal",
                     signal.hint,
                     {"kind": signal.kind, "detail": signal.detail, "tool": tool_name},
+                )
+
+        if self._enable_breaker:
+            change = self._breaker.record(
+                session_id,
+                tool_name,
+                success=not text.lstrip().startswith("[error]"),
+            )
+            if change == "opened":
+                await monitor.report_event(
+                    "tool_circuit_opened",
+                    f"{tool_name} 连续失败达到阈值，已暂停调用 {int(self._breaker.cooldown_seconds)}s",
+                    {"tool": tool_name},
+                )
+            elif change == "closed":
+                await monitor.report_event(
+                    "tool_circuit_closed",
+                    f"{tool_name} 已恢复调用",
+                    {"tool": tool_name},
+                )
+
+        if self._enable_budget:
+            hint = self._budget.observe(session_id, len(text))
+            if hint:
+                self._queue_hint(session_id, hint)
+                await monitor.report_event(
+                    "task_budget_hint", hint, {"tool": tool_name}
                 )
 
         if text != original:
