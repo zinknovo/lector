@@ -101,7 +101,9 @@ class AGUIRunAdapter:
         self.state["status"] = "running"
         self.emit(
             RunStartedEvent(
-                thread_id=self.request.thread_id, run_id=self.request.run_id
+                thread_id=self.request.thread_id,
+                run_id=self.request.run_id,
+                input=self.request,
             )
         )
         self.snapshot()

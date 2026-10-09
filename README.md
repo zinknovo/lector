@@ -134,6 +134,18 @@ uv run python scripts/run_recall_eval.py
 uv run pytest tests/test_eval_harness.py tests/test_recall_eval.py -q
 ```
 
+失败回流（教程 18 的最小闭环）：
+
+```bash
+# 1. 真实会话导出为候选案例（原始查询 + 运行信号 + 证据，全部脱敏）
+uv run python scripts/export_case.py <thread_id>
+
+# 2. 并入前的去重与校验（默认 dry-run；--write 只写 eval/failures/）
+uv run python scripts/merge_cases.py eval/failures/*.yaml
+```
+
+`expected` 留空的候选需要人工补齐后并入正式用例集；没有任何候选会被自动晋升。
+
 ## API Server
 
 ```bash

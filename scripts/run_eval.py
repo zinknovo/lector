@@ -108,6 +108,11 @@ def main() -> None:
         help="Path to cases yaml",
     )
     parser.add_argument("--output", default=None, help="Optional json output path")
+    parser.add_argument(
+        "--failures-out",
+        default=None,
+        help="把未通过的用例沉淀为候选案例文件（YAML，可用 merge_cases.py 合并）",
+    )
     args = parser.parse_args()
 
     cases_path = Path(args.cases)
@@ -129,6 +134,31 @@ def main() -> None:
         Path(args.output).write_text(
             json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8"
         )
+
+    if args.failures_out:
+        failing = [case for case, result in zip(cases, results) if not result["ok"]]
+        if failing:
+            import yaml
+
+            path = Path(args.failures_out)
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(
+                yaml.safe_dump(
+                    {
+                        "cases": [
+                            {
+                                "id": case.get("id"),
+                                "inputs": case.get("inputs", {}),
+                                "expected": case.get("expected", {}),
+                            }
+                            for case in failing
+                        ]
+                    },
+                    allow_unicode=True,
+                    sort_keys=False,
+                ),
+                encoding="utf-8",
+            )
 
     print(json.dumps(report, ensure_ascii=False, indent=2))
     raise SystemExit(0 if passed else 1)
