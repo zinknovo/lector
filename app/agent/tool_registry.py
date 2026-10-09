@@ -8,6 +8,7 @@ from app.tools.item_picker import item_picker
 from app.tools.exchange_rate import exchange_rate
 from app.tools.market_trend_research import market_trend_research
 from app.tools.planner import planner
+from app.tools.preferences import forget_preference, remember_preference
 from app.tools.price_compare import price_compare
 from app.tools.product_scraper import product_scraper
 from app.tools.procurement_quote import procurement_quote
@@ -38,6 +39,8 @@ FULL_TOOL_SET = [
     supplier_evaluator,
     selection_decision,
     shopping_summary,
+    remember_preference,
+    forget_preference,
     dispatch_tool,
 ]
 

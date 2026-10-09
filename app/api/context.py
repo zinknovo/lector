@@ -13,6 +13,11 @@ _session_dir_var: ContextVar[Path | None] = ContextVar(
     "globex_session_dir", default=None
 )
 
+# 当前请求的买家/用户标识（偏好读写按它归属）
+_user_id_var: ContextVar[str | None] = ContextVar(
+    "globex_user_id", default=None
+)
+
 
 def set_thread_context(thread_id: str, session_dir: Path) -> None:
     """请求入口处调用，写入本次任务的身份信息。"""
@@ -26,6 +31,15 @@ def get_thread_id() -> str | None:
 
 def get_session_dir() -> Path | None:
     return _session_dir_var.get()
+
+
+def set_user_context(user_id: str | None) -> None:
+    """请求入口处调用；子 Agent 继承同一买家身份。"""
+    _ = _user_id_var.set(user_id)
+
+
+def get_user_id() -> str | None:
+    return _user_id_var.get()
 
 
 @contextmanager

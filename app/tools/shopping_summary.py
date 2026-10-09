@@ -122,7 +122,11 @@ async def shopping_summary(
     user_query: str,
     new_preferences: list[str] | None = None,
 ) -> ShoppingSummaryOutput:
-    """Render final prose and structured rows from verified selection decisions."""
+    """Render final prose and structured rows from verified selection decisions.
+
+    new_preferences：只放卖家明确要求长期记住的偏好；负向偏好以「不要/避免/避开」
+    开头，其余按正向偏好保存（写入由主流程完成，本工具只回传）。
+    """
     await monitor.report_tool_start(
         "shopping_summary", {"decisions_count": len(decisions)}
     )

@@ -13,9 +13,14 @@ from app.agent.harness import build_harness_middleware
 from app.agent.llm import get_llm
 from app.agent.prompts import get_system_prompt
 from app.agent.tool_registry import FULL_TOOL_SET
-from app.api.context import set_thread_context
+from app.api.context import set_thread_context, set_user_context
 from app.api.monitor import monitor
-from app.memory.store import store
+from app.memory.store import (
+    PreferenceConflict,
+    PreferenceKind,
+    PreferenceStoreError,
+    store,
+)
 from app.security.guards import audit_output
 from app.utils.path_utils import ensure_session_dir
 
@@ -35,6 +40,69 @@ def _build_main_agent(prompt: str):
     )
 
 
+# 负向偏好的口语前缀：报告里回传的偏好按此推断 like / dislike
+_DISLIKE_PREFIXES = ("不要", "避免", "避开", "排除", "不喜欢", "禁用")
+
+
+def infer_preference_kind(statement: str) -> PreferenceKind:
+    """偏好的正负向推断（报告回传的是纯文本，模型按提示词以「不要/避免…」开头）。"""
+    cleaned = statement.strip()
+    return (
+        "dislike"
+        if cleaned.startswith(_DISLIKE_PREFIXES)
+        else "like"
+    )
+
+
+def extract_learned_preferences(messages: list[Any]) -> list[str]:
+    """从最后一条 shopping_summary 工具输出里取 learned_preferences。"""
+    for message in reversed(messages):
+        if getattr(message, "type", "") != "tool":
+            continue
+        if getattr(message, "name", "") != "shopping_summary":
+            continue
+        content = message.content
+        if not isinstance(content, str):
+            return []
+        try:
+            payload = json.loads(content)
+        except (json.JSONDecodeError, TypeError):
+            return []
+        preferences = (
+            payload.get("learned_preferences") if isinstance(payload, dict) else None
+        )
+        if not isinstance(preferences, list):
+            return []
+        return [
+            str(preference).strip()
+            for preference in preferences
+            if str(preference).strip()
+        ]
+    return []
+
+
+async def persist_learned_preferences(
+    user_id: str | None, messages: list[Any]
+) -> None:
+    """把报告里明确要求记住的偏好落库；冲突/失败只记事件，不打断任务。"""
+    if not user_id:
+        return
+    for statement in extract_learned_preferences(messages):
+        try:
+            await store.add(
+                user_id,
+                kind=infer_preference_kind(statement),
+                statement=statement,
+                source="report",
+            )
+        except (PreferenceConflict, PreferenceStoreError) as exc:
+            await monitor.report_event(
+                "preference_not_saved",
+                f"偏好未保存：{exc}",
+                {"statement": statement},
+            )
+
+
 def _message_text(content: object) -> str:
     if isinstance(content, str):
         return content
@@ -49,13 +117,13 @@ async def run_agent(
     """主 AgentLoop 的入口。"""
     session_dir = ensure_session_dir(thread_id)
     set_thread_context(thread_id, session_dir)
+    set_user_context(user_id)
 
-    long_term = (
-        await store.read_relevant(user_id=user_id, query=query)
-        if user_id
-        else []
+    preferences = await store.list_by_buyer(user_id) if user_id else []
+    pref_text = "\n".join(
+        f"- [{preference.kind}] {preference.statement}"
+        for preference in preferences
     )
-    pref_text = "\n".join(f"- {preference.text}" for preference in long_term)
     pref_text = pref_text or "（暂无沉淀偏好）"
     prompt = get_system_prompt(long_term_preferences=pref_text)
     agent = _build_main_agent(prompt)
@@ -95,15 +163,7 @@ async def run_agent(
         return {"status": "iteration_limit", "thread_id": thread_id}
 
     final_message = result["messages"][-1]
-    additional = getattr(final_message, "additional_kwargs", {})
-    new_preferences = additional.get("learned_preferences", [])
-    if not isinstance(new_preferences, list):
-        new_preferences = []
-    clean_preferences = [
-        str(preference) for preference in new_preferences if str(preference).strip()
-    ]
-    if user_id and clean_preferences:
-        await store.write_many(user_id=user_id, texts=clean_preferences)
+    await persist_learned_preferences(user_id, result["messages"])
 
     final_text = _message_text(final_message.content)
     safe, final_text = audit_output(final_text)
