@@ -55,10 +55,16 @@ class FakeStore:
         return self.cards
 
 
-def _patch_monitor(monkeypatch) -> None:
+def _patch_monitor(
+    monkeypatch,
+) -> tuple[AsyncMock, AsyncMock]:
+    """替换 monitor 上报方法；返回 (report_error, report_tool_end) 供断言。"""
+    report_error = AsyncMock()
+    report_tool_end = AsyncMock()
     monkeypatch.setattr(module.monitor, "report_tool_start", AsyncMock())
-    monkeypatch.setattr(module.monitor, "report_tool_end", AsyncMock())
-    monkeypatch.setattr(module.monitor, "report_error", AsyncMock())
+    monkeypatch.setattr(module.monitor, "report_tool_end", report_tool_end)
+    monkeypatch.setattr(module.monitor, "report_error", report_error)
+    return report_error, report_tool_end
 
 
 def test_category_insight_uses_store_and_preserves_deep_output(monkeypatch) -> None:
@@ -93,26 +99,26 @@ def test_quick_category_insight_omits_attributes(monkeypatch) -> None:
 def test_empty_category_insight_is_a_normal_zero_confidence_result(monkeypatch) -> None:
     store = FakeStore([])
     monkeypatch.setattr(module, "get_category_knowledge_store", lambda: store)
-    _patch_monitor(monkeypatch)
+    report_error, report_tool_end = _patch_monitor(monkeypatch)
 
     result = asyncio.run(module.category_insight.ainvoke({"category": "马克杯"}))
 
     assert result.confidence == 0.0
     assert result.bestsellers == []
-    module.monitor.report_error.assert_not_awaited()
-    module.monitor.report_tool_end.assert_awaited_once()
+    report_error.assert_not_awaited()
+    report_tool_end.assert_awaited_once()
 
 
 def test_category_insight_reports_and_reraises_store_error(monkeypatch) -> None:
     store = FakeStore([], RuntimeError("mongo unavailable"))
     monkeypatch.setattr(module, "get_category_knowledge_store", lambda: store)
-    _patch_monitor(monkeypatch)
+    report_error, report_tool_end = _patch_monitor(monkeypatch)
 
     with pytest.raises(RuntimeError, match="mongo unavailable"):
         asyncio.run(module.category_insight.ainvoke({"category": "马克杯"}))
 
-    module.monitor.report_error.assert_awaited_once_with(
+    report_error.assert_awaited_once_with(
         "RuntimeError",
         "category_insight failed: mongo unavailable",
     )
-    module.monitor.report_tool_end.assert_not_awaited()
+    report_tool_end.assert_not_awaited()

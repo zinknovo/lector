@@ -1,6 +1,7 @@
 """Terminal tool that renders a Lector selection report."""
 
 import json
+import re
 import time
 
 from langchain_core.tools import tool
@@ -9,6 +10,7 @@ from pydantic import BaseModel, Field
 from app.agent.llm import get_llm
 from app.agent.prompts import get_shopping_summary_prompt
 from app.api.monitor import monitor
+from app.evidence.models import EvidenceItem
 from app.tools.selection_decision import Recommendation, SelectionDecision
 from app.tools.supplier_evaluator import RiskLevel
 
@@ -31,6 +33,7 @@ class SelectionReport(BaseModel):
     reasons: list[str] = Field(default_factory=list)
     risks: list[str] = Field(default_factory=list)
     missing_data: list[str] = Field(default_factory=list)
+    evidence: list[EvidenceItem] = Field(default_factory=list)
 
 
 class ShoppingSummaryOutput(BaseModel):
@@ -38,6 +41,7 @@ class ShoppingSummaryOutput(BaseModel):
     decisions: list[SelectionDecision]
     report: list[SelectionReport]
     learned_preferences: list[str]
+    unverified_numbers: list[str] = Field(default_factory=list)
 
 
 def _to_report(decision: SelectionDecision) -> SelectionReport:
@@ -59,7 +63,57 @@ def _to_report(decision: SelectionDecision) -> SelectionReport:
         reasons=decision.reasons,
         risks=decision.risks,
         missing_data=decision.missing_data,
+        evidence=decision.evidence,
     )
+
+
+_NUMBER_PATTERN = re.compile(r"(\d+(?:\.\d+)?)\s*(%|％|元|人民币|块)?")
+
+
+def _collect_allowed_numbers(decisions: list[SelectionDecision]) -> set[float]:
+    """决策与证据里出现过的全部数值，作为报告数字的对照集合。"""
+    allowed: set[float] = set()
+    for decision in decisions:
+        for value in decision.model_dump().values():
+            if isinstance(value, (int, float)) and not isinstance(value, bool):
+                allowed.add(float(value))
+        for item in decision.evidence:
+            if isinstance(item.value, (int, float)) and not isinstance(
+                item.value, bool
+            ):
+                allowed.add(float(item.value))
+    return allowed
+
+
+def _find_unverified_numbers(
+    text: str, allowed: set[float]
+) -> list[str]:
+    """核验报告文本中的金额/百分比数字是否能在决策或证据中找到对应。
+
+    只核验带金额/百分比语义或带小数的数字，避免把序号与数量误报。
+    """
+    hits: list[str] = []
+    for match in _NUMBER_PATTERN.finditer(text):
+        raw = match.group(1)
+        suffix = match.group(2) or ""
+        if not suffix and "." not in raw:
+            continue
+        try:
+            value = float(raw)
+        except ValueError:
+            continue
+        if value == 0.0:
+            continue
+        if any(
+            abs(value - candidate) < 0.011
+            or abs(value - candidate * 100) < 0.011
+            for candidate in allowed
+        ):
+            continue
+        token = f"{raw}{suffix}" if suffix else raw
+        if token not in hits:
+            hits.append(token)
+    return hits[:10]
 
 
 @tool
@@ -74,6 +128,7 @@ async def shopping_summary(
     )
     started_at = time.time()
     report = [_to_report(decision) for decision in decisions]
+    unverified_numbers: list[str] = []
     if not decisions:
         final_text = "没有可报告的选品决策；请先完成商品筛选和决策聚合。"
     else:
@@ -99,6 +154,15 @@ async def shopping_summary(
             if isinstance(content, str)
             else json.dumps(content, ensure_ascii=False, default=str)
         )
+        unverified_numbers = _find_unverified_numbers(
+            final_text, _collect_allowed_numbers(decisions)
+        )
+        if unverified_numbers:
+            await monitor.report_event(
+                "report_number_check",
+                "报告中的部分数字未能在决策证据中找到对应",
+                {"unverified": unverified_numbers},
+            )
     await monitor.report_tool_end(
         "shopping_summary", int((time.time() - started_at) * 1000)
     )
@@ -107,4 +171,5 @@ async def shopping_summary(
         decisions=decisions,
         report=report,
         learned_preferences=new_preferences or [],
+        unverified_numbers=unverified_numbers,
     )

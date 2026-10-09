@@ -35,7 +35,7 @@ def test_dispatch_sets_depth_recursion_limit_and_restores_context(monkeypatch, t
             return {"messages": [AIMessage(content="完成")]}
 
     fake_agent = FakeAgent()
-    monkeypatch.setattr(module, "create_react_agent", lambda **_kwargs: fake_agent)
+    monkeypatch.setattr(module, "create_agent", lambda **_kwargs: fake_agent)
 
     async def run():
         with thread_scope("parent", tmp_path):
@@ -73,7 +73,7 @@ def test_dispatch_returns_readable_message_on_timeout(monkeypatch, tmp_path) -> 
         async def ainvoke(self, _state, config):
             await asyncio.sleep(0.05)
 
-    monkeypatch.setattr(module, "create_react_agent", lambda **_kwargs: SlowAgent())
+    monkeypatch.setattr(module, "create_agent", lambda **_kwargs: SlowAgent())
     monkeypatch.setattr(module, "SUB_AGENT_TIMEOUT_SEC", 0.001, raising=False)
 
     async def run():

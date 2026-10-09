@@ -22,6 +22,7 @@ from reportlab.platypus import (
     TableStyle,
 )
 
+from app.evidence.models import METHOD_LABELS
 from app.tools.shopping_summary import SelectionReport, ShoppingSummaryOutput
 
 _SAFE_BASENAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
@@ -45,6 +46,7 @@ _HEADERS = [
     "reasons",
     "risks",
     "missing_data",
+    "evidence",
 ]
 
 
@@ -77,7 +79,27 @@ def _row(item: SelectionReport) -> list[object]:
         _safe_cell("; ".join(item.reasons)),
         _safe_cell("; ".join(item.risks)),
         _safe_cell("; ".join(item.missing_data)),
+        _safe_cell("; ".join(evidence.label() for evidence in item.evidence)),
     ]
+
+
+def _evidence_rows(summary: ShoppingSummaryOutput) -> list[list[object]]:
+    rows: list[list[object]] = []
+    for item in summary.report:
+        for evidence in item.evidence:
+            rows.append(
+                [
+                    _safe_cell(item.product_id),
+                    _safe_cell(evidence.field),
+                    _safe_cell(evidence.value),
+                    METHOD_LABELS[evidence.method],
+                    _safe_cell(evidence.source),
+                    evidence.confidence,
+                    evidence.observed_at,
+                    _safe_cell(evidence.detail),
+                ]
+            )
+    return rows
 
 
 def _write_xlsx(summary: ShoppingSummaryOutput, target: Path) -> None:
@@ -98,6 +120,19 @@ def _write_xlsx(summary: ShoppingSummaryOutput, target: Path) -> None:
         sheet.column_dimensions[column].width = width
     for column in range(5, len(_HEADERS) + 1):
         sheet.column_dimensions[chr(64 + column)].width = 18
+
+    evidence_sheet = workbook.create_sheet("证据")
+    evidence_sheet.append(
+        ["product_id", "field", "value", "method", "source", "confidence", "observed_at", "detail"]
+    )
+    for cell in evidence_sheet[1]:
+        cell.font = Font(bold=True, color="FFFFFF")
+        cell.fill = PatternFill("solid", fgColor="1F4E78")
+    for row in _evidence_rows(summary):
+        evidence_sheet.append(row)
+    evidence_sheet.freeze_panes = "A2"
+    for column, width in {"A": 14, "B": 24, "C": 14, "D": 8, "E": 22, "F": 12, "G": 26, "H": 60}.items():
+        evidence_sheet.column_dimensions[column].width = width
     workbook.save(target)
 
 
@@ -121,6 +156,9 @@ def _write_pdf(summary: ShoppingSummaryOutput, target: Path) -> None:
         fontSize=9,
         leading=12,
         alignment=TA_LEFT,
+    )
+    section_style = ParagraphStyle(
+        "LectorSection", parent=title_style, fontSize=13
     )
     document = SimpleDocTemplate(
         str(target), pagesize=landscape(A4), leftMargin=24, rightMargin=24
@@ -175,6 +213,26 @@ def _write_pdf(summary: ShoppingSummaryOutput, target: Path) -> None:
         )
     )
     story.append(table)
+
+    evidence_lines: list[str] = []
+    for item in summary.report:
+        for evidence in item.evidence:
+            line = f"{item.product_id} · {evidence.label()}"
+            if evidence.detail:
+                line += f" · {evidence.detail}"
+            evidence_lines.append(escape(line))
+    if summary.unverified_numbers:
+        evidence_lines.append(
+            escape("未核验数字（未在决策证据中找到对应）: " + ", ".join(summary.unverified_numbers))
+        )
+    story.append(Spacer(1, 14))
+    story.append(Paragraph("证据与口径", section_style))
+    story.append(Spacer(1, 6))
+    if evidence_lines:
+        for line in evidence_lines:
+            story.append(Paragraph(line, body_style))
+    else:
+        story.append(Paragraph("（本次报告没有证据记录）", body_style))
     document.build(story)
 
 

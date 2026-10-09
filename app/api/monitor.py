@@ -4,6 +4,7 @@ from datetime import UTC, datetime
 
 from app.api.connection import manager
 from app.api.context import get_thread_id
+from app.api.run_events import notify_thread_events
 
 
 def utc_timestamp() -> str:
@@ -27,6 +28,7 @@ class Monitor:
             "timestamp": utc_timestamp(),
         }
         await manager.send_to_thread(payload, thread_id)
+        notify_thread_events(thread_id, payload)
 
     async def report_tool_start(self, tool_name: str, args: dict[str, object]) -> None:
         await self._emit("tool_start", f"正在调用 {tool_name}", {
@@ -53,6 +55,12 @@ class Monitor:
 
     async def report_error(self, error_type: str, message: str) -> None:
         await self._emit("error", message, {"error_type": error_type})
+
+    async def report_event(
+        self, event: str, message: str, data: dict[str, object]
+    ) -> None:
+        """通用事件入口：证据核验、漂移提示、循环提示等专用事件。"""
+        await self._emit(event, message, data)
 
 
 monitor = Monitor()

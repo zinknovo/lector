@@ -1,0 +1,52 @@
+# 品类知识召回评测：标注单位是 card_id，相关性分级 0-3。
+# 二元命中阈值：等级 >= 2；等级 0 的卡片必须不出现（低置信度过滤）。
+k: 5
+gates:
+  recall@k: 0.95
+  mrr: 0.90
+  ndcg@k: 0.90
+  no_result_accuracy: 1.0
+queries:
+  - id: q-earbuds-zh
+    query: "蓝牙耳机"
+    relevant: {"earbuds-bestseller": 3, "earbuds-attribute": 2, "earbuds-price": 2}
+  - id: q-earbuds-alias
+    query: "真无线耳机"
+    relevant: {"earbuds-bestseller": 3, "earbuds-attribute": 2, "earbuds-price": 2}
+  - id: q-earbuds-en
+    query: "wireless earbuds"
+    relevant: {"earbuds-bestseller": 3, "earbuds-attribute": 2, "earbuds-price": 2}
+  - id: q-backpack
+    query: "旅行背包"
+    relevant: {"backpack-bestseller": 3, "backpack-attribute": 2, "backpack-price": 2}
+  - id: q-backpack-alias
+    query: "户外背包"
+    relevant: {"backpack-bestseller": 3, "backpack-attribute": 2, "backpack-price": 2}
+  - id: q-pillow
+    query: "颈枕"
+    relevant: {"pillow-bestseller": 3, "pillow-attribute": 2, "pillow-price": 2}
+  - id: q-pillow-alias
+    query: "U型枕"
+    relevant: {"pillow-bestseller": 3, "pillow-attribute": 2, "pillow-price": 2}
+  - id: q-thermos
+    query: "保温杯"
+    relevant: {"thermos-bestseller": 3, "thermos-attribute": 2, "thermos-price": 2}
+  - id: q-thermos-alias
+    query: "水杯"
+    relevant: {"thermos-bestseller": 3, "thermos-attribute": 2, "thermos-price": 2}
+  - id: q-phone-case
+    query: "手机壳"
+    relevant: {"case-bestseller": 3, "case-attribute": 2, "case-price": 2}
+  - id: q-camping-light
+    query: "露营灯"
+    relevant: {"light-bestseller": 3, "light-attribute": 2, "light-price": 2}
+  - id: q-travel-set
+    query: "旅行三件套"
+    relevant: {"travelset-bestseller": 3, "travelset-price": 2}
+  - id: q-coffee-alias
+    query: "马克杯"
+    relevant: {"coffee-bestseller": 3, "coffee-price": 2}
+  - id: q-empty
+    query: "无人机"
+    expect_no_result: true
+    relevant: {}

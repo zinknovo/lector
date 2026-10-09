@@ -10,6 +10,8 @@ from pydantic import BaseModel, Field
 
 from app.agent.llm import get_llm
 from app.api.monitor import monitor
+from app.evidence.models import EvidenceMethod
+from app.evidence.store import record_evidence
 from app.tools.web_search import WebSearchOutput, web_search
 
 
@@ -101,5 +103,18 @@ async def exchange_rate(
                 rate=rate,
                 source="web_search+llm",
             )
+    method = {
+        "identity": EvidenceMethod.MEASURED,
+        "memory_cache": EvidenceMethod.TABLE,
+    }.get(result.source, EvidenceMethod.EXTRACTED)
+    record_evidence(
+        field="exchange_rate",
+        value=result.rate,
+        method=method,
+        source=result.source,
+        detail=f"{source_currency}->{target_currency}",
+        confidence=1.0 if result.source == "identity" else None,
+        tool="exchange_rate",
+    )
     await monitor.report_tool_end("exchange_rate", int((time.time() - started_at) * 1000))
     return result

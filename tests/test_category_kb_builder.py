@@ -3,6 +3,7 @@ import json
 from pathlib import Path
 
 from app.recall.category_kb import CategoryCard
+from app.recall.category_store import CategoryCardType
 from scripts.build_category_kb import build_category_kb
 
 
@@ -10,6 +11,16 @@ class FakeStore:
     def __init__(self) -> None:
         self.cards: list[CategoryCard] = []
         self.calls = 0
+
+    async def search(
+        self,
+        category: str,
+        *,
+        card_types: set[CategoryCardType] | None = None,
+        limit: int = 8,
+    ) -> list[CategoryCard]:
+        del category, card_types, limit
+        return []
 
     async def upsert_many(self, cards: list[CategoryCard]) -> int:
         self.calls += 1

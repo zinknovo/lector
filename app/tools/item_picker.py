@@ -1,6 +1,7 @@
 """Select a small set of products from landed-cost candidates."""
 
 import time
+from typing import Literal
 
 from langchain_core.tools import tool
 from pydantic import BaseModel, Field
@@ -20,9 +21,19 @@ class PickedItem(BaseModel):
     flags: list[str] = Field(default_factory=list)
 
 
+class ExcludedCandidate(BaseModel):
+    """被排除的候选及其原因（卖家可据此复核筛选口径）。"""
+
+    item_id: str
+    platform: str
+    reason_code: Literal["preference_hard_fail", "not_top_n"]
+    reason: str
+
+
 class ItemPickerOutput(BaseModel):
     picks: list[PickedItem]
     rejected_brief: list[str]
+    excluded: list[ExcludedCandidate] = Field(default_factory=list)
 
 
 @tool
@@ -43,6 +54,7 @@ async def item_picker(
     t0 = time.time()
 
     rejected: list[str] = []
+    excluded: list[ExcludedCandidate] = []
     candidates: list[PickedItem] = []
     prefs = user_preferences or []
 
@@ -52,7 +64,16 @@ async def item_picker(
             (flag for flag in flags if flag.startswith("HARD_FAIL:")), None
         )
         if hard_fail is not None:
-            rejected.append(f"{cost.item_id}: {hard_fail.split(':', 1)[1]}")
+            reason = hard_fail.split(":", 1)[1].strip()
+            rejected.append(f"{cost.item_id}: {reason}")
+            excluded.append(
+                ExcludedCandidate(
+                    item_id=cost.item_id,
+                    platform=cost.platform,
+                    reason_code="preference_hard_fail",
+                    reason=reason,
+                )
+            )
             continue
 
         score, reasons = _score(cost, insight, prefs)
@@ -70,11 +91,22 @@ async def item_picker(
 
     candidates.sort(key=lambda item: item.score, reverse=True)
     picks = candidates[: max(0, min(top_n, 3))]
+    for dropped in candidates[len(picks):]:
+        excluded.append(
+            ExcludedCandidate(
+                item_id=dropped.item_id,
+                platform=dropped.platform,
+                reason_code="not_top_n",
+                reason=f"评分 {dropped.score} 未进入 Top {len(picks)}",
+            )
+        )
 
     await monitor.report_tool_end(
         "item_picker", int((time.time() - t0) * 1000)
     )
-    return ItemPickerOutput(picks=picks, rejected_brief=rejected[:8])
+    return ItemPickerOutput(
+        picks=picks, rejected_brief=rejected[:8], excluded=excluded[:20]
+    )
 
 
 def _check_preferences(cost: LandedCost, prefs: list[str]) -> list[str]:

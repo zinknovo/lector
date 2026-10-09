@@ -7,6 +7,8 @@ from langchain_core.tools import tool
 from pydantic import BaseModel
 
 from app.api.monitor import monitor
+from app.evidence.models import EvidenceMethod
+from app.evidence.store import record_evidence
 from app.recall.duty import estimate_duty
 from app.recall.shipping import estimate_shipping
 from app.tools.price_compare import PricePoint
@@ -94,6 +96,20 @@ async def shipping_calc(
         )
 
     landed.sort(key=lambda x: x.landed_cny)
+
+    for cost in landed:
+        record_evidence(
+            field="landed_cost_cny",
+            value=cost.landed_cny,
+            method=EvidenceMethod.TABLE,
+            source="cost_tables",
+            detail=(
+                f"destination={destination} | 运费 {cost.shipping_cny} + "
+                f"关税 {cost.duty_cny}（{cost.duty_tier}） | eta {cost.eta_days}d"
+            ),
+            tool="shipping_calc",
+            product_id=cost.item_id,
+        )
 
     await monitor.report_tool_end("shipping_calc", int((time.time() - t0) * 1000))
     return ShippingCalcOutput(destination=destination, items=landed)

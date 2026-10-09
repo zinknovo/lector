@@ -1,13 +1,13 @@
 import { render, screen } from "@testing-library/react";
 import { describe, expect, test } from "vitest";
 
-import type { AguiEvent } from "../types";
+import type { LectorEvent } from "../types";
 
 const event = (
   name: string,
   data: Record<string, unknown> = {},
-): AguiEvent => ({
-  type: "monitor_event",
+): LectorEvent => ({
+  type: "CUSTOM",
   event: name,
   message: `${name} message`,
   data,

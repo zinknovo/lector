@@ -122,3 +122,24 @@ def test_procurement_quote_unavailable_without_anchor(monkeypatch) -> None:
     )
     assert result.source == "unavailable"
     assert result.procurement_cost_cny is None
+
+
+def test_search_query_uses_product_query_verbatim(monkeypatch) -> None:
+    """工具不对品类做隐藏改写：检索词就是模型给出的 product_query。"""
+    captured: dict[str, str] = {}
+
+    class CapturingSearch:
+        async def ainvoke(self, payload):
+            captured["query"] = payload["query"]
+            return WebSearchOutput(
+                query=payload["query"],
+                provider="test",
+                status="unavailable",
+                error="offline",
+            )
+
+    monkeypatch.setattr(module, "web_search", CapturingSearch())
+    asyncio.run(module.procurement_quote.ainvoke({"product_query": "紫砂保温杯"}))
+
+    assert captured["query"].startswith("1688 紫砂保温杯")
+    assert "蓝牙" not in captured["query"]

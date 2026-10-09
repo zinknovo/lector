@@ -16,6 +16,7 @@ export default defineConfig(({ mode }) => {
       port: 5173,
       proxy: {
         "/api": { target, headers },
+        "/ag-ui": { target, headers },
         "/ws": {
           target: target.replace(/^http/, "ws"),
           headers,

@@ -1,7 +1,11 @@
 """Run lightweight business-accuracy eval cases.
 
-This runner is intentionally deterministic and does not require external data sources.
-It focuses on core gating rules for selection decisions.
+This runner is intentionally deterministic and does not require external data
+sources. It focuses on core gating rules for selection decisions, plus
+evidence-chain behavior: cases may seed a temporary evidence store
+(``evidence:``) to verify that gates use stored provenance instead of
+model-transcribed numbers, and may assert which evidence fields the decision
+must carry (``expected.evidence_fields``).
 """
 
 from __future__ import annotations
@@ -9,10 +13,18 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
+import sys
+import tempfile
 from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
 
 import yaml
 
+from app.api.context import thread_scope
+from app.evidence.models import EvidenceItem, EvidenceMethod
+from app.evidence.store import EvidenceStore
 from app.tools.selection_decision import Recommendation, selection_decision
 
 
@@ -24,20 +36,62 @@ def _load_cases(path: Path) -> list[dict]:
     return cases
 
 
-async def _run_one(case: dict) -> dict:
+def _seed_evidence(items: list[dict], store: EvidenceStore) -> None:
+    for raw in items:
+        store.add(
+            EvidenceItem(
+                field=raw["field"],
+                value=raw.get("value"),
+                method=EvidenceMethod(raw.get("method", "measured")),
+                source=raw.get("source", "eval"),
+                detail=raw.get("detail", ""),
+                confidence=raw.get("confidence"),
+                observed_at=raw.get("observed_at", "2026-01-01T00:00:00Z"),
+                tool=raw.get("tool", "eval"),
+                product_id=raw.get("product_id"),
+            )
+        )
+
+
+async def _invoke(case: dict):
     inputs = case.get("inputs", {})
+    evidence_seed = case.get("evidence") or []
+    if not evidence_seed:
+        return await selection_decision.ainvoke(inputs)
+    with tempfile.TemporaryDirectory() as tmp:
+        session_dir = Path(tmp)
+        store = EvidenceStore(session_dir / "evidence.jsonl")
+        _seed_evidence(evidence_seed, store)
+        with thread_scope(f"eval-{case.get('id', 'case')}", session_dir):
+            return await selection_decision.ainvoke(inputs)
+
+
+async def run_case(case: dict) -> dict:
+    """Run one case and return a structured result (also used by tests)."""
     expected = case.get("expected", {})
-    result = await selection_decision.ainvoke(inputs)
+    result = await _invoke(case)
 
     expected_reco = expected.get("recommendation")
-    actual_reco = result.recommendation.value if isinstance(result.recommendation, Recommendation) else str(result.recommendation)
+    actual_reco = (
+        result.recommendation.value
+        if isinstance(result.recommendation, Recommendation)
+        else str(result.recommendation)
+    )
+    reco_ok = expected_reco == actual_reco
 
-    ok = expected_reco == actual_reco
+    expected_fields = expected.get("evidence_fields") or []
+    present_fields = [item.field for item in result.evidence]
+    missing_fields = [
+        field for field in expected_fields if field not in present_fields
+    ]
+
     return {
         "id": case.get("id"),
         "expected": expected_reco,
         "actual": actual_reco,
-        "ok": ok,
+        "ok": reco_ok and not missing_fields,
+        "evidence_fields": present_fields,
+        "missing_evidence_fields": missing_fields,
         "missing_data": result.missing_data,
         "risks": result.risks,
         "reasons": result.reasons,
@@ -60,7 +114,7 @@ def main() -> None:
     cases = _load_cases(cases_path)
 
     async def _run_all() -> list[dict]:
-        tasks = [_run_one(case) for case in cases]
+        tasks = [run_case(case) for case in cases]
         return await asyncio.gather(*tasks)
 
     results = asyncio.run(_run_all())
@@ -82,4 +136,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

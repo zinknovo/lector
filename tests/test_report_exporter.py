@@ -60,3 +60,52 @@ def test_export_rejects_unsafe_basename(tmp_path: Path) -> None:
         assert "basename" in str(exc)
     else:
         raise AssertionError("unsafe basename must be rejected")
+
+
+def test_export_includes_evidence_sheet(tmp_path) -> None:
+    """XLSX 证据页与 PDF 证据段应携带每个数字的口径。"""
+    from openpyxl import load_workbook
+
+    from app.evidence.models import EvidenceItem, EvidenceMethod
+    from app.reports.exporter import export_selection_report
+    from app.tools.selection_decision import (
+        Recommendation,
+        SelectionDecision,
+    )
+    from app.tools.shopping_summary import ShoppingSummaryOutput, _to_report
+
+    decision = SelectionDecision(
+        product_id="A1",
+        title="测试商品",
+        platform="amazon",
+        overall_score=0.8,
+        confidence=0.9,
+        recommendation=Recommendation.RECOMMEND,
+        evidence=[
+            EvidenceItem(
+                field="procurement_cost_cny",
+                value=12.5,
+                method=EvidenceMethod.EXTRACTED,
+                source="web_search",
+                detail="1688 搜索结果 | https://example.com/1",
+                confidence=0.7,
+                observed_at="2026-10-09T00:00:00Z",
+                tool="procurement_quote",
+            )
+        ],
+    )
+    summary = ShoppingSummaryOutput(
+        final_text="采购价 12.5 元（来自 1688 搜索证据）",
+        decisions=[decision],
+        report=[_to_report(decision)],
+        learned_preferences=[],
+    )
+    result = export_selection_report(summary, tmp_path)
+    workbook = load_workbook(result.xlsx_path)
+    assert "证据" in workbook.sheetnames
+    sheet = workbook["证据"]
+    rows = list(sheet.iter_rows(values_only=True))
+    assert rows[0][1] == "field"
+    assert rows[1][1] == "procurement_cost_cny"
+    assert rows[1][3] == "提取"
+    assert rows[1][5] == 0.7

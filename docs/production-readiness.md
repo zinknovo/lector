@@ -17,6 +17,8 @@ cp .env.example .env
   检查会明确返回 `skipped` 或 `fail`，不会伪造结果。
 - DeepSeek 服务端搜索同时执行检索和总结，默认超时为 120 秒，可通过
   `DEEPSEEK_WEB_SEARCH_TIMEOUT_SECONDS` 调整。
+- 前端主链路走标准 AG-UI（`POST /ag-ui/run` + SSE，网关与 Nginx 均已配置直通与
+  关闭缓冲）；`/api/task` + `/ws/` 仅保留兼容，新集成请使用 AG-UI 接口。
 - `LECTOR_API_KEY` 是 Java 网关与反向代理之间的共享密钥。Compose 未设置时仅使用
 `local-dev-only` 作为本机默认值。Compose 的所有端口只绑定 `127.0.0.1`；它是
 本机开发拓扑，不得原样部署到共享环境。共享环境必须替换密钥，并在前端之前增加

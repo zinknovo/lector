@@ -7,6 +7,25 @@ CATEGORY_ALIASES: dict[str, str] = {
     "出差三件套": "旅行三件套",
     "咖啡杯": "咖啡杯",
     "马克杯": "咖啡杯",
+    # 耳机：中文口语/别名 → 标准品类
+    "蓝牙耳机": "wireless earbuds",
+    "无线耳机": "wireless earbuds",
+    "真无线耳机": "wireless earbuds",
+    "tws耳机": "wireless earbuds",
+    # 背包
+    "旅行背包": "travel backpack",
+    "户外背包": "travel backpack",
+    "双肩包": "travel backpack",
+    # 颈枕
+    "u型枕": "颈枕",
+    "护颈枕": "颈枕",
+    # 保温杯
+    "保温水杯": "保温杯",
+    "水杯": "保温杯",
+    # 手机壳
+    "手机套": "手机壳",
+    # 露营灯
+    "户外灯": "露营灯",
 }
 
 

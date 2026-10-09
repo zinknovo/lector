@@ -18,10 +18,11 @@ from fastapi import (
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, field_validator
 
-from app.agent.main import run_agent
+from app.api.agui import agui_runtime, register_ag_ui_routes
 from app.api.connection import manager
 from app.api.context import thread_scope
 from app.api.monitor import monitor, utc_timestamp
+from app.api.task_runner import run_agent_scoped
 from app.utils import path_utils
 from app.utils.path_utils import (
     ensure_session_dir,
@@ -114,24 +115,18 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
     await task_registry.cancel_all()
 
 
-app = FastAPI(title="Globex Agent API", lifespan=lifespan)
+app = FastAPI(title="Lector Agent API", lifespan=lifespan)
+register_ag_ui_routes(app, agui_runtime)
 
 
 async def _run_task(req: TaskRequest, thread_id: str) -> None:
     current = asyncio.current_task()
     if current is None:  # pragma: no cover - asyncio always supplies one here
         raise RuntimeError("任务未运行在 asyncio Task 中")
-    session_dir = ensure_session_dir(thread_id)
-    with thread_scope(thread_id, session_dir):
-        try:
-            await run_agent(req.query, thread_id, user_id=req.user_id)
-        except asyncio.CancelledError:
-            await monitor.report_error("cancelled", "任务被取消")
-            raise
-        except Exception as exc:
-            await monitor.report_error("internal_error", str(exc))
-        finally:
-            task_registry.discard_if_current(thread_id, current)
+    try:
+        await run_agent_scoped(req.query, thread_id, user_id=req.user_id)
+    finally:
+        task_registry.discard_if_current(thread_id, current)
 
 
 @app.post("/api/task")

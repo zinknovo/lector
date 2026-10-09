@@ -42,3 +42,35 @@ def test_compress_after_breakpoint_keeps_prefix_and_truncates_long_tool_result()
     assert result[1].content == "x" * 2000 + "\n[...内容已精简]"
     assert long_tool.content == "x" * 2500
     assert result[2] is short_tool
+
+
+class TestCompressionProtection:
+    """L2 保护：决策/报告结果不压缩，证据类工具放宽阈值。"""
+
+    def _tool_message(self, name: str, size: int) -> ToolMessage:
+        return ToolMessage(
+            content="x" * size, tool_call_id=f"call-{name}", name=name
+        )
+
+    def test_protected_tool_results_survive(self) -> None:
+        from app.compress.compressor import compress_after_breakpoint
+
+        messages = [
+            self._tool_message("selection_decision", 5000),
+            self._tool_message("shopping_summary", 6000),
+        ]
+        result = compress_after_breakpoint(messages, breakpoint_idx=0)
+        assert [len(m.content) for m in result] == [5000, 6000]
+
+    def test_evidence_tools_get_wider_limit(self) -> None:
+        from app.compress.compressor import compress_after_breakpoint
+
+        messages = [
+            self._tool_message("procurement_quote", 3000),  # < 4000，保留
+            self._tool_message("web_search", 3000),  # > 2000，压缩
+        ]
+        result = compress_after_breakpoint(messages, breakpoint_idx=0)
+        first, second = result
+        assert len(first.content) == 3000
+        assert len(second.content) < 3000
+        assert "内容已精简" in str(second.content)

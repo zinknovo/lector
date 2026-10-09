@@ -86,3 +86,42 @@ def test_item_picker_filters_sorts_and_limits_results() -> None:
 
     assert [pick.item_id for pick in result.picks] == ["BEST"]
     assert result.rejected_brief == ["EBAY-PLASTIC: 塑料，命中用户黑名单"]
+
+
+def test_excluded_reports_reason_codes() -> None:
+    """被排除的候选项要带结构化原因（黑名单硬拒 / 未进 Top N）。"""
+    import asyncio
+
+    from app.tools.item_picker import item_picker
+    from app.tools.shipping_calc import LandedCost
+
+    def cost(item_id: str, sales: int) -> LandedCost:
+        return LandedCost(
+            item_id=item_id,
+            platform="ebay" if item_id.endswith("-PLASTIC") else "amazon",
+            price_cny=100.0,
+            shipping_cny=5.0,
+            duty_cny=1.0,
+            landed_cny=6.0,
+            eta_days=10,
+            duty_tier="免征",
+            sales=sales,
+        )
+
+    result = asyncio.run(
+        item_picker.ainvoke(
+            {
+                "landed": [
+                    cost("A1", 5000),
+                    cost("B2", 3000),
+                    cost("C3", 100),
+                    cost("D4-PLASTIC", 4000),
+                ],
+                "user_preferences": ["不要塑料"],
+                "top_n": 2,
+            }
+        )
+    )
+    codes = {item.item_id: item.reason_code for item in result.excluded}
+    assert codes["D4-PLASTIC"] == "preference_hard_fail"
+    assert codes["C3"] == "not_top_n"

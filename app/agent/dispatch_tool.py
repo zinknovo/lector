@@ -3,10 +3,12 @@
 import asyncio
 from uuid import uuid4
 
+from langchain.agents import create_agent
+from langchain_core.messages import HumanMessage
 from langchain_core.tools import tool
-from langgraph.prebuilt import create_react_agent
 
 from app.agent.fork_guard import ForkLimitExceeded, enter_fork
+from app.agent.harness import build_harness_middleware
 from app.agent.llm import get_llm
 from app.agent.prompts import get_system_prompt
 from app.api.context import _session_dir_var, _thread_id_var, get_session_dir
@@ -33,10 +35,11 @@ async def dispatch_tool(demands: str) -> str:
             sub_thread_id = f"sub-{uuid4().hex[:8]}-d{depth}"
             await monitor.report_fork(sub_thread_id, demands)
 
-            sub_agent = create_react_agent(
+            sub_agent = create_agent(
                 model=get_llm(),
                 tools=FULL_TOOL_SET,
-                prompt=get_system_prompt(),
+                system_prompt=get_system_prompt(),
+                middleware=[build_harness_middleware(enable_drift=False)],
             )
 
             parent_session_dir = get_session_dir()
@@ -50,7 +53,7 @@ async def dispatch_tool(demands: str) -> str:
             try:
                 result = await asyncio.wait_for(
                     sub_agent.ainvoke(
-                        {"messages": [("user", demands)]},
+                        {"messages": [HumanMessage(content=demands)]},
                         config={
                             "configurable": {"thread_id": sub_thread_id},
                             "recursion_limit": SUB_AGENT_MAX_ITERATIONS,

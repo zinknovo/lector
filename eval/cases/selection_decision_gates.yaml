@@ -71,3 +71,101 @@ cases:
     expected:
       recommendation: "watch"
 
+
+  # 证据库优先：模型转述的高置信度不能覆盖库中的估算值（数值归属）
+  - id: stored_low_confidence_overrides_model_claim
+    evidence:
+      - field: procurement_cost_cny
+        value: 30.0
+        method: estimated
+        source: retail_ratio_estimate
+        confidence: 0.40
+        tool: procurement_quote
+    inputs:
+      product_id: "A3"
+      title: "Strong Product 3"
+      platform: "amazon"
+      rating: 4.9
+      review_count: 10000
+      sales: 10000
+      selling_price_cny: 500
+      landed_cost_cny: 200
+      shipping_cost_cny: 20
+      eta_days: 10
+      total_cost_cny: 250
+      net_profit_cny: 250
+      profit_margin: 0.5
+      roi: 1.0
+      supplier_risk_score: 0.1
+      supplier_risk_level: "low"
+      procurement_confidence: 0.95
+      revenue_evidence_confidence: 0.90
+      category_semantic_match: true
+    expected:
+      recommendation: "watch"
+
+  # 证据完整性：决策输出必须携带采购价与售价证据
+  - id: decision_carries_procurement_and_revenue_evidence
+    evidence:
+      - field: procurement_cost_cny
+        value: 82.0
+        method: extracted
+        source: web_search
+        detail: "1688 搜索结果 | https://example.com/p1"
+        confidence: 0.70
+        tool: procurement_quote
+      - field: selling_price_evidence
+        value: 39.9
+        method: extracted
+        source: web_search
+        detail: "USD 39.9 | https://example.com/m1"
+        confidence: 0.75
+        tool: market_price_search
+    inputs:
+      product_id: "A4"
+      title: "Strong Product 4"
+      platform: "amazon"
+      rating: 4.9
+      review_count: 10000
+      sales: 10000
+      selling_price_cny: 500
+      landed_cost_cny: 200
+      shipping_cost_cny: 20
+      eta_days: 10
+      total_cost_cny: 250
+      net_profit_cny: 250
+      profit_margin: 0.5
+      roi: 1.0
+      supplier_risk_score: 0.1
+      supplier_risk_level: "low"
+      procurement_confidence: 0.70
+      revenue_evidence_confidence: 0.75
+      category_semantic_match: true
+    expected:
+      recommendation: "recommend"
+      evidence_fields: ["procurement_cost_cny", "selling_price_evidence"]
+
+  # 证据缺失：无可信证据时不得升级为 recommend
+  - id: missing_evidence_keeps_gate_conservative
+    inputs:
+      product_id: "A5"
+      title: "Strong Product 5"
+      platform: "amazon"
+      rating: 4.9
+      review_count: 10000
+      sales: 10000
+      selling_price_cny: 500
+      landed_cost_cny: 200
+      shipping_cost_cny: 20
+      eta_days: 10
+      total_cost_cny: 250
+      net_profit_cny: 250
+      profit_margin: 0.5
+      roi: 1.0
+      supplier_risk_score: 0.1
+      supplier_risk_level: "low"
+      procurement_confidence: 0.40
+      revenue_evidence_confidence: 0.90
+      category_semantic_match: true
+    expected:
+      recommendation: "watch"

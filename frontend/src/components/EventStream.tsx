@@ -1,4 +1,4 @@
-import type { AguiEvent } from "../types";
+import type { LectorEvent } from "../types";
 
 const EVENT_LABEL: Record<string, { icon: string; text: string }> = {
   session_created: { icon: "●", text: "会话已创建" },
@@ -7,19 +7,27 @@ const EVENT_LABEL: Record<string, { icon: string; text: string }> = {
   tool_end: { icon: "✓", text: "工具完成" },
   task_result: { icon: "◆", text: "任务完成" },
   error: { icon: "!", text: "错误" },
+  drift_signal: { icon: "≈", text: "漂移提示" },
+  loop_detected: { icon: "↻", text: "重复调用提示" },
+  injection_filtered: { icon: "⛨", text: "内容过滤" },
+  tool_result_capped: { icon: "✂", text: "结果裁剪" },
+  report_number_check: { icon: "№", text: "报告数字核验" },
+  output_audit: { icon: "⛨", text: "输出脱敏" },
+  evidence_mismatch: { icon: "≠", text: "证据口径修正" },
+  task_incomplete: { icon: "!", text: "任务未完成" },
 };
 
-function textData(event: AguiEvent, key: string): string | null {
+function textData(event: LectorEvent, key: string): string | null {
   const value = event.data[key];
   return typeof value === "string" && value ? value : null;
 }
 
-function numberData(event: AguiEvent, key: string): number | null {
+function numberData(event: LectorEvent, key: string): number | null {
   const value = event.data[key];
   return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
 
-export function EventStream({ events }: { events: AguiEvent[] }) {
+export function EventStream({ events }: { events: LectorEvent[] }) {
   if (events.length === 0) {
     return <p className="event-empty">任务启动后，执行事件会显示在这里。</p>;
   }

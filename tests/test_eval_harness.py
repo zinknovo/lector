@@ -5,7 +5,7 @@ from pathlib import Path
 
 import yaml
 
-from app.tools.selection_decision import selection_decision
+from scripts.run_eval import run_case
 
 
 def _load_cases() -> list[dict]:
@@ -18,13 +18,22 @@ def _load_cases() -> list[dict]:
 
 
 def test_selection_decision_evidence_gates() -> None:
-    cases = _load_cases()
-    for case in cases:
-        inputs = case["inputs"]
-        expected = case["expected"]["recommendation"]
-        result = asyncio.run(selection_decision.ainvoke(inputs))
-        actual = result.recommendation.value
-        assert (
-            actual == expected
-        ), f"case={case.get('id')} expected={expected} actual={actual} risks={result.risks}"
+    for case in _load_cases():
+        result = asyncio.run(run_case(case))
+        assert result["ok"], (
+            f"case={case.get('id')} expected={result['expected']} "
+            f"actual={result['actual']} missing_evidence={result['missing_evidence_fields']} "
+            f"risks={result['risks']}"
+        )
 
+
+def test_gates_use_stored_evidence_over_model_claims() -> None:
+    """模型转述的高置信度不能覆盖证据库中的估算值。"""
+    cases = [
+        case
+        for case in _load_cases()
+        if case.get("id") == "stored_low_confidence_overrides_model_claim"
+    ]
+    assert cases, "缺少证据库优先用例"
+    result = asyncio.run(run_case(cases[0]))
+    assert result["ok"], result

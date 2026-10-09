@@ -19,3 +19,14 @@ def test_frontend_proxy_authenticates_before_injecting_gateway_key() -> None:
     assert 'auth_basic "Lector";' in config
     assert "auth_basic_user_file /etc/nginx/.htpasswd;" in config
     assert "proxy_set_header X-API-Key ${LECTOR_API_KEY};" in config
+
+
+def test_frontend_proxy_streams_agui_sse_with_gateway_key() -> None:
+    """AG-UI 的 SSE 直通同样要注入网关 key 并关闭缓冲。"""
+    config = (ROOT / "frontend/nginx.conf.template").read_text(encoding="utf-8")
+
+    assert "location /ag-ui/" in config
+    agui_block = config.split("location /ag-ui/", 1)[1].split("location ", 1)[0]
+    assert "proxy_set_header X-API-Key ${LECTOR_API_KEY};" in agui_block
+    assert "proxy_buffering off;" in agui_block
+    assert "proxy_read_timeout 3600s;" in agui_block

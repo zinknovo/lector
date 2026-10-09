@@ -3,12 +3,12 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
-  useGlobexTask: vi.fn(),
+  useLectorTask: vi.fn(),
   startTask: vi.fn(),
   cancelTask: vi.fn(),
 }));
 
-vi.mock("./hooks/useGlobexTask", () => ({ useGlobexTask: mocks.useGlobexTask }));
+vi.mock("./hooks/useLectorTask", () => ({ useLectorTask: mocks.useLectorTask }));
 
 async function loadApp() {
   return import("./App");
@@ -18,7 +18,7 @@ describe("App", () => {
   beforeEach(() => {
     mocks.startTask.mockReset();
     mocks.cancelTask.mockReset();
-    mocks.useGlobexTask.mockReturnValue({
+    mocks.useLectorTask.mockReturnValue({
       threadId: null,
       events: [],
       finalAnswer: null,
@@ -46,7 +46,7 @@ describe("App", () => {
   });
 
   test("shows cancel while a task is running", async () => {
-    mocks.useGlobexTask.mockReturnValue({
+    mocks.useLectorTask.mockReturnValue({
       threadId: "thread-1",
       events: [],
       finalAnswer: null,
@@ -67,7 +67,7 @@ describe("App", () => {
   });
 
   test("renders markdown without enabling raw HTML", async () => {
-    mocks.useGlobexTask.mockReturnValue({
+    mocks.useLectorTask.mockReturnValue({
       threadId: "thread-1",
       events: [],
       finalAnswer: "<script>alert('x')</script>\n\n## 推荐清单",
@@ -84,7 +84,7 @@ describe("App", () => {
   });
 
   test("shows task errors", async () => {
-    mocks.useGlobexTask.mockReturnValue({
+    mocks.useLectorTask.mockReturnValue({
       threadId: null,
       events: [],
       finalAnswer: null,

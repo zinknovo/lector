@@ -10,6 +10,8 @@ from langchain_core.tools import tool
 from pydantic import BaseModel, Field
 
 from app.api.monitor import monitor
+from app.evidence.models import EvidenceMethod
+from app.evidence.store import record_evidence
 from app.tools.web_search import WebSearchOutput, web_search
 
 
@@ -200,6 +202,29 @@ async def market_price_search(
         for e in evidence:
             e.confidence = min(0.95, round(e.confidence + conf_boost, 3))
 
+    if evidence:
+        best = max(evidence, key=lambda e: e.confidence)
+        record_evidence(
+            field="selling_price_evidence",
+            value=best.price_local,
+            method=EvidenceMethod.EXTRACTED,
+            source="web_search",
+            detail=f"{best.currency_local} {best.price_local} | {best.source_url}",
+            confidence=best.confidence,
+            tool="market_price_search",
+            product_id=item_id,
+        )
+    else:
+        record_evidence(
+            field="selling_price_evidence",
+            value=None,
+            method=EvidenceMethod.MISSING,
+            source="web_search",
+            detail=query,
+            confidence=0.0,
+            tool="market_price_search",
+            product_id=item_id,
+        )
     await monitor.report_tool_end(
         "market_price_search", int((time.time() - started_at) * 1000)
     )

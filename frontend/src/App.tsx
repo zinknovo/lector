@@ -2,7 +2,7 @@ import { FormEvent, useState } from "react";
 import ReactMarkdown from "react-markdown";
 
 import { EventStream } from "./components/EventStream";
-import { useGlobexTask } from "./hooks/useGlobexTask";
+import { useLectorTask } from "./hooks/useLectorTask";
 
 export default function App() {
   const {
@@ -13,7 +13,7 @@ export default function App() {
     error,
     startTask,
     cancelTask,
-  } = useGlobexTask();
+  } = useLectorTask();
   const [query, setQuery] = useState("");
 
   const submit = (event: FormEvent<HTMLFormElement>) => {

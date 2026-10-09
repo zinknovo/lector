@@ -32,7 +32,7 @@ def test_task_registry_replacement_is_identity_safe() -> None:
 
 
 def test_create_and_cancel_task(monkeypatch: pytest.MonkeyPatch) -> None:
-    from app.api import server
+    from app.api import server, task_runner
 
     started = asyncio.Event()
 
@@ -46,7 +46,7 @@ def test_create_and_cancel_task(monkeypatch: pytest.MonkeyPatch) -> None:
         await asyncio.Event().wait()
         return {"status": "ok"}
 
-    monkeypatch.setattr(server, "run_agent", fake_run_agent)
+    monkeypatch.setattr(task_runner, "run_agent", fake_run_agent)
     with TestClient(server.app) as client:
         response = client.post(
             "/api/task",

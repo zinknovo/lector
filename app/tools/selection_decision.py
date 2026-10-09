@@ -8,6 +8,8 @@ from langchain_core.tools import tool
 from pydantic import BaseModel, Field
 
 from app.api.monitor import monitor
+from app.evidence.models import EvidenceItem
+from app.evidence.store import get_evidence_store
 from app.tools.supplier_evaluator import RiskLevel
 
 
@@ -44,6 +46,7 @@ class SelectionDecision(BaseModel):
     reasons: list[str] = Field(default_factory=list)
     risks: list[str] = Field(default_factory=list)
     missing_data: list[str] = Field(default_factory=list)
+    evidence: list[EvidenceItem] = Field(default_factory=list)
 
 
 _WEIGHTS = {
@@ -131,6 +134,54 @@ async def selection_decision(
     """Aggregate existing market, profit, logistics and supplier evidence."""
     await monitor.report_tool_start("selection_decision", {"product_id": product_id})
     started_at = time.time()
+
+    # 读取本会话证据库：门禁数值优先采用库中值（模型转述仅作对照）。
+    store = get_evidence_store()
+    procurement_item = (
+        store.latest(field="procurement_cost_cny") if store is not None else None
+    )
+    revenue_item = (
+        store.latest(field="selling_price_evidence") if store is not None else None
+    )
+    landed_item = (
+        store.latest(field="landed_cost_cny", product_id=product_id)
+        if store is not None
+        else None
+    )
+    evidence_items: list[EvidenceItem] = [
+        item
+        for item in (procurement_item, revenue_item, landed_item)
+        if item is not None
+    ]
+
+    async def _prefer_stored(
+        field_name: str,
+        stored: EvidenceItem | None,
+        passed: float | None,
+    ) -> float | None:
+        """库中值优先；与模型传值不一致时以库为准并发事件。"""
+        if stored is None or stored.confidence is None:
+            return passed
+        if passed is not None and abs(stored.confidence - passed) > 1e-6:
+            await monitor.report_event(
+                "evidence_mismatch",
+                f"{field_name} 置信度以证据库为准",
+                {
+                    "field": field_name,
+                    "from_model": passed,
+                    "from_store": stored.confidence,
+                    "source": stored.source,
+                },
+            )
+        return stored.confidence
+
+    effective_procurement_conf = await _prefer_stored(
+        "procurement_confidence", procurement_item, procurement_confidence
+    )
+    effective_revenue_conf = await _prefer_stored(
+        "revenue_evidence_confidence", revenue_item, revenue_evidence_confidence
+    )
+
     scores = {
         "market": _market_score(rating, review_count, sales),
         "profit": _profit_score(profit_margin, roi, net_profit_cny),
@@ -188,22 +239,22 @@ async def selection_decision(
 
     # procurement confidence: prevents over-confident recommend when we only estimated purchase price.
     if (
-        procurement_confidence is not None
-        and procurement_confidence < PROCUREMENT_CONF_MIN
+        effective_procurement_conf is not None
+        and effective_procurement_conf < PROCUREMENT_CONF_MIN
         and recommendation == Recommendation.RECOMMEND
     ):
         recommendation = Recommendation.WATCH
-        risks.append(f"采购价置信度低（{procurement_confidence:.2f} < {PROCUREMENT_CONF_MIN:.2f}）")
+        risks.append(f"采购价置信度低（{effective_procurement_conf:.2f} < {PROCUREMENT_CONF_MIN:.2f}）")
 
     # revenue evidence confidence: prevents over-trusting web price extraction.
     if (
-        revenue_evidence_confidence is not None
-        and revenue_evidence_confidence < REVENUE_EVIDENCE_CONF_MIN
+        effective_revenue_conf is not None
+        and effective_revenue_conf < REVENUE_EVIDENCE_CONF_MIN
         and recommendation == Recommendation.RECOMMEND
     ):
         recommendation = Recommendation.WATCH
         risks.append(
-            f"售价证据质量低（{revenue_evidence_confidence:.2f} < {REVENUE_EVIDENCE_CONF_MIN:.2f}）"
+            f"售价证据质量低（{effective_revenue_conf:.2f} < {REVENUE_EVIDENCE_CONF_MIN:.2f}）"
         )
 
     # category semantic mismatch: avoid "category downgrade" silently recommending.
@@ -241,4 +292,5 @@ async def selection_decision(
         reasons=reasons,
         risks=risks,
         missing_data=missing_data,
+        evidence=evidence_items,
     )
