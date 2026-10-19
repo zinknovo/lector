@@ -1,6 +1,6 @@
 """熔断器状态机：连续失败打开、冷却探测、探测失败重新冷却、按会话隔离。"""
 
-from app.agent.breaker import ToolCircuitBreaker
+from app.agent.breaker import Permit, Refused, ToolCircuitBreaker
 
 
 class FakeClock:
@@ -18,73 +18,197 @@ def _breaker(clock: FakeClock) -> ToolCircuitBreaker:
     return ToolCircuitBreaker(threshold=3, cooldown_seconds=60.0, clock=clock)
 
 
+def _admit(
+    breaker: ToolCircuitBreaker,
+    session_id: str = "s1",
+    tool_name: str = "web_search",
+) -> Permit:
+    admission = breaker.allow(session_id, tool_name)
+    assert isinstance(admission, Permit)
+    return admission
+
+
 def test_opens_after_consecutive_failures() -> None:
     clock = FakeClock()
     breaker = _breaker(clock)
 
-    assert breaker.record("s1", "web_search", success=False) is None
-    assert breaker.record("s1", "web_search", success=False) is None
-    assert breaker.record("s1", "web_search", success=False) == "opened"
+    assert breaker.record(_admit(breaker), success=False) is None
+    assert breaker.record(_admit(breaker), success=False) is None
+    assert breaker.record(_admit(breaker), success=False) == "opened"
 
-    allowed, remaining = breaker.allow("s1", "web_search")
-    assert allowed is False
-    assert 0 < remaining <= 60.0
+    refused = breaker.allow("s1", "web_search")
+    assert isinstance(refused, Refused)
+    assert 0 < refused.remaining <= 60.0
 
 
 def test_success_resets_failure_streak() -> None:
     clock = FakeClock()
     breaker = _breaker(clock)
-    breaker.record("s1", "web_search", success=False)
-    breaker.record("s1", "web_search", success=False)
-    breaker.record("s1", "web_search", success=True)
-    assert breaker.record("s1", "web_search", success=False) is None
-    assert breaker.allow("s1", "web_search") == (True, 0.0)
+    breaker.record(_admit(breaker), success=False)
+    breaker.record(_admit(breaker), success=False)
+    breaker.record(_admit(breaker), success=True)
+    assert breaker.record(_admit(breaker), success=False) is None
+    assert isinstance(breaker.allow("s1", "web_search"), Permit)
 
 
 def test_probe_after_cooldown_closes_on_success() -> None:
     clock = FakeClock()
     breaker = _breaker(clock)
     for _ in range(3):
-        breaker.record("s1", "web_search", success=False)
+        breaker.record(_admit(breaker), success=False)
 
     clock.advance(61)
-    allowed, _ = breaker.allow("s1", "web_search")
-    assert allowed is True  # 半开探测
-    assert breaker.record("s1", "web_search", success=True) == "closed"
-    assert breaker.allow("s1", "web_search") == (True, 0.0)
+    probe = _admit(breaker)
+    assert probe.probe is True
+    assert breaker.record(probe, success=True) == "closed"
+    assert isinstance(breaker.allow("s1", "web_search"), Permit)
 
 
 def test_probe_failure_reopens_cooldown() -> None:
     clock = FakeClock()
     breaker = _breaker(clock)
     for _ in range(3):
-        breaker.record("s1", "web_search", success=False)
+        breaker.record(_admit(breaker), success=False)
     clock.advance(61)
-    breaker.allow("s1", "web_search")  # 取得探测资格
+    probe = _admit(breaker)
 
-    assert breaker.record("s1", "web_search", success=False) == "opened"
-    allowed, remaining = breaker.allow("s1", "web_search")
-    assert allowed is False
-    assert remaining > 59  # 冷却重新开始
+    assert breaker.record(probe, success=False) == "opened"
+    refused = breaker.allow("s1", "web_search")
+    assert isinstance(refused, Refused)
+    assert refused.remaining > 59
 
 
 def test_states_are_isolated_per_session_and_tool() -> None:
     clock = FakeClock()
     breaker = _breaker(clock)
     for _ in range(3):
-        breaker.record("s1", "web_search", success=False)
+        breaker.record(_admit(breaker), success=False)
 
-    assert breaker.allow("s2", "web_search") == (True, 0.0)
-    assert breaker.allow("s1", "item_search") == (True, 0.0)
+    assert isinstance(breaker.allow("s2", "web_search"), Permit)
+    assert isinstance(breaker.allow("s1", "item_search"), Permit)
 
 
 def test_reset_clears_session_states() -> None:
     clock = FakeClock()
     breaker = _breaker(clock)
     for _ in range(3):
-        breaker.record("s1", "web_search", success=False)
+        breaker.record(_admit(breaker), success=False)
     breaker.reset("s1")
-    assert breaker.allow("s1", "web_search") == (True, 0.0)
+    assert isinstance(breaker.allow("s1", "web_search"), Permit)
+
+
+def test_second_caller_during_probe_is_refused() -> None:
+    clock = FakeClock()
+    breaker = _breaker(clock)
+    for _ in range(3):
+        breaker.record(_admit(breaker), success=False)
+    clock.advance(61)
+    probe = _admit(breaker)
+    assert probe.probe is True
+
+    refused = breaker.allow("s1", "web_search")
+    assert isinstance(refused, Refused)
+    assert refused.remaining == 0.0
+
+    # 状态未变：原探测仍然有效，成功仍能关闭熔断器
+    assert breaker.record(probe, success=True) == "closed"
+
+
+def test_stale_success_cannot_close_a_reopened_circuit() -> None:
+    clock = FakeClock()
+    breaker = _breaker(clock)
+    stale = _admit(breaker)
+    for _ in range(3):
+        breaker.record(_admit(breaker), success=False)
+
+    assert breaker.record(stale, success=True) is None
+
+    refused = breaker.allow("s1", "web_search")
+    assert isinstance(refused, Refused)
+    assert refused.remaining > 0
+
+
+def test_stale_failure_cannot_restart_a_reopened_circuit() -> None:
+    clock = FakeClock()
+    breaker = _breaker(clock)
+    stale = _admit(breaker)
+    for _ in range(3):
+        breaker.record(_admit(breaker), success=False)
+
+    clock.advance(10)
+    assert breaker.record(stale, success=False) is None
+
+    refused = breaker.allow("s1", "web_search")
+    assert isinstance(refused, Refused)
+    assert 0 < refused.remaining <= 50.0  # 冷却未被过期失败记录重置
+
+
+def test_release_frees_probe_slot_and_restarts_cooldown() -> None:
+    clock = FakeClock()
+    breaker = _breaker(clock)
+    for _ in range(3):
+        breaker.record(_admit(breaker), success=False)
+    clock.advance(61)
+    probe = _admit(breaker)
+    assert probe.probe is True
+
+    breaker.release(probe)
+    breaker.release(probe)  # 幂等
+
+    refused = breaker.allow("s1", "web_search")
+    assert isinstance(refused, Refused)
+    assert refused.remaining > 0
+
+    clock.advance(61)
+    next_probe = _admit(breaker)
+    assert next_probe.probe is True
+
+
+def test_released_probe_cannot_settle_the_next_probe() -> None:
+    clock = FakeClock()
+    breaker = _breaker(clock)
+    for _ in range(3):
+        breaker.record(_admit(breaker), success=False)
+    clock.advance(61)
+    abandoned = _admit(breaker)
+    breaker.release(abandoned)
+
+    clock.advance(61)
+    replacement = _admit(breaker)
+    assert replacement != abandoned  # 归还后的票据不得与新探测等价
+
+    assert breaker.record(abandoned, success=True) is None
+    assert breaker.record(replacement, success=True) == "closed"
+
+
+def test_duplicate_probe_record_after_close_is_ignored() -> None:
+    clock = FakeClock()
+    breaker = _breaker(clock)
+    for _ in range(3):
+        breaker.record(_admit(breaker), success=False)
+    clock.advance(61)
+    probe = _admit(breaker)
+
+    assert breaker.record(probe, success=True) == "closed"
+    assert breaker.record(probe, success=True) is None
+    assert breaker.record(probe, success=False) is None
+    assert isinstance(breaker.allow("s1", "web_search"), Permit)
+
+
+def test_reset_invalidates_predated_permits() -> None:
+    clock = FakeClock()
+    breaker = _breaker(clock)
+    stale = _admit(breaker)
+
+    breaker.reset("s1")
+    assert breaker.record(stale, success=False) is None
+
+    # 重新建状态后，旧票据依然无法计数
+    fresh = _admit(breaker)
+    assert breaker.record(stale, success=False) is None
+    assert breaker.record(fresh, success=False) is None
+    assert breaker.record(_admit(breaker), success=False) is None
+    assert breaker.record(_admit(breaker), success=False) == "opened"
 
 
 class TestTaskBudget:

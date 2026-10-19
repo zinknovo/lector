@@ -109,3 +109,34 @@ def test_only_one_half_open_probe_runs() -> None:
     result = asyncio.run(scenario())
     assert probes == ["probe-1"]
     assert "熔断" in result
+
+
+def test_raising_handler_releases_the_probe_slot() -> None:
+    clock = FakeClock()
+    breaker = ToolCircuitBreaker(threshold=1, cooldown_seconds=0.0, clock=clock)
+    middleware = HarnessMiddleware(enable_drift=False, breaker=breaker)
+    calls: list[str] = []
+
+    async def failing_handler(request: ToolCallRequest) -> Any:
+        return _tool_message("[error] upstream down", request)
+
+    async def raising_handler(request: ToolCallRequest) -> Any:
+        calls.append("raise")
+        raise RuntimeError("handler blew up")
+
+    async def ok_handler(request: ToolCallRequest) -> Any:
+        calls.append("ok")
+        return _tool_message("ok", request)
+
+    async def scenario() -> str:
+        await middleware.awrap_tool_call(_request("open"), failing_handler)
+        try:
+            await middleware.awrap_tool_call(_request("boom"), raising_handler)
+        except RuntimeError:
+            pass
+        result = await middleware.awrap_tool_call(_request("after"), ok_handler)
+        return str(result.content)
+
+    result = asyncio.run(scenario())
+    assert calls == ["raise", "ok"]
+    assert "熔断" not in result
