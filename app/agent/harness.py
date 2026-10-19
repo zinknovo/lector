@@ -19,7 +19,7 @@ from langchain.agents.middleware import AgentMiddleware
 from langchain.agents.middleware.types import ToolCallRequest
 from langchain_core.messages import HumanMessage, SystemMessage, ToolMessage
 
-from app.agent.breaker import ToolCircuitBreaker
+from app.agent.breaker import Refused, ToolCircuitBreaker
 from app.agent.budget import TaskBudget
 from app.agent.drift import DriftDetector
 from app.agent.middleware import LoopDetector, cap_tool_result, post_step_compress
@@ -150,17 +150,23 @@ class HarnessMiddleware(AgentMiddleware):
         started_at: float,
         span_handle: Any,
     ) -> Any:
-        allowed, remaining = self._breaker.allow(session_id, tool_name)
-        if not allowed:
+        admission = self._breaker.allow(session_id, tool_name)
+        if isinstance(admission, Refused):
+            remaining = admission.remaining
+            detail = (
+                f"约剩 {int(remaining)}s"
+                if remaining > 0
+                else "半开探测仍在进行"
+            )
             await monitor.report_event(
                 "tool_circuit_open",
-                f"{tool_name} 连续失败后已暂停调用（约剩 {int(remaining)}s）",
+                f"{tool_name} 连续失败后已暂停调用（{detail}）",
                 {"tool": tool_name, "remaining_seconds": int(remaining)},
             )
             span_handle.set_attribute("tool.rejected", "circuit_open")
             return ToolMessage(
                 content=(
-                    f"[error] 工具暂时不可用（熔断中，约剩 {int(remaining)}s）："
+                    f"[error] 工具暂时不可用（熔断中，{detail}）："
                     f"{tool_name} 连续失败已暂停。请改用其他工具或稍后重试，"
                     "不要重复调用。"
                 ),
@@ -168,102 +174,111 @@ class HarnessMiddleware(AgentMiddleware):
                 name=tool_name,
             )
 
-        result = await handler(request)
-        if not isinstance(result, ToolMessage):
-            return result
+        permit = admission
+        try:
+            result = await handler(request)
+            if not isinstance(result, ToolMessage):
+                return result
 
-        text = _message_text(result.content)
-        original = text
+            text = _message_text(result.content)
+            original = text
 
-        hit, text = sanitize_tool_output(text)
-        if hit:
-            await monitor.report_event(
-                "injection_filtered",
-                f"{tool_name} 的返回命中疑似注入模式，已就地过滤",
-                {"tool": tool_name, "session": session_id},
-            )
-
-        capped, text = cap_tool_result(text)
-        if capped:
-            reference = persist_full_tool_result(session_id, tool_name, original)
-            if reference:
-                text = (
-                    f"{text}\n[完整结果已保存：{reference}"
-                    "（本轮会话文件，可下载复核；需要细节请缩小查询范围重新查询）]"
+            hit, text = sanitize_tool_output(text)
+            if hit:
+                await monitor.report_event(
+                    "injection_filtered",
+                    f"{tool_name} 的返回命中疑似注入模式，已就地过滤",
+                    {"tool": tool_name, "session": session_id},
                 )
-            await monitor.report_event(
-                "tool_result_capped",
-                f"{tool_name} 的返回过大，已裁剪后进入上下文",
-                {
-                    "tool": tool_name,
-                    "before": len(original),
-                    "after": len(text),
-                    "saved_as": reference,
-                },
-            )
 
-        hint = self._loop.observe(
-            session_id=session_id,
-            tool_name=tool_name,
-            arguments=arguments if isinstance(arguments, dict) else {},
-            result=text,
-        )
-        if hint:
-            self._queue_hint(session_id, hint)
-            await monitor.report_event(
-                "loop_detected",
-                f"{tool_name} 重复调用且没有推进，已注入收敛提示",
-                {"tool": tool_name, "session": session_id},
-            )
+            capped, text = cap_tool_result(text)
+            if capped:
+                reference = persist_full_tool_result(session_id, tool_name, original)
+                if reference:
+                    text = (
+                        f"{text}\n[完整结果已保存：{reference}"
+                        "（本轮会话文件，可下载复核；需要细节请缩小查询范围重新查询）]"
+                    )
+                await monitor.report_event(
+                    "tool_result_capped",
+                    f"{tool_name} 的返回过大，已裁剪后进入上下文",
+                    {
+                        "tool": tool_name,
+                        "before": len(original),
+                        "after": len(text),
+                        "saved_as": reference,
+                    },
+                )
 
-        if self._enable_drift:
-            for signal in self._drift.observe(
+            hint = self._loop.observe(
                 session_id=session_id,
                 tool_name=tool_name,
                 arguments=arguments if isinstance(arguments, dict) else {},
-                result_text=text,
-            ):
-                self._queue_hint(session_id, signal.hint)
+                result=text,
+            )
+            if hint:
+                self._queue_hint(session_id, hint)
                 await monitor.report_event(
-                    "drift_signal",
-                    signal.hint,
-                    {"kind": signal.kind, "detail": signal.detail, "tool": tool_name},
+                    "loop_detected",
+                    f"{tool_name} 重复调用且没有推进，已注入收敛提示",
+                    {"tool": tool_name, "session": session_id},
                 )
 
-        span_handle.set_attribute(
-            "tool.duration_ms", int((time.perf_counter() - started_at) * 1000)
-        )
-        span_handle.set_attribute(
-            "tool.status",
-            "error" if text.lstrip().startswith("[error]") else "success",
-        )
+            if self._enable_drift:
+                for signal in self._drift.observe(
+                    session_id=session_id,
+                    tool_name=tool_name,
+                    arguments=arguments if isinstance(arguments, dict) else {},
+                    result_text=text,
+                ):
+                    self._queue_hint(session_id, signal.hint)
+                    await monitor.report_event(
+                        "drift_signal",
+                        signal.hint,
+                        {
+                            "kind": signal.kind,
+                            "detail": signal.detail,
+                            "tool": tool_name,
+                        },
+                    )
 
-        change = self._breaker.record(
-            session_id,
-            tool_name,
-            success=not text.lstrip().startswith("[error]"),
-        )
-        if change == "opened":
-            await monitor.report_event(
-                "tool_circuit_opened",
-                f"{tool_name} 连续失败达到阈值，已暂停调用 {int(self._breaker.cooldown_seconds)}s",
-                {"tool": tool_name},
+            span_handle.set_attribute(
+                "tool.duration_ms", int((time.perf_counter() - started_at) * 1000)
             )
-        elif change == "closed":
-            await monitor.report_event(
-                "tool_circuit_closed",
-                f"{tool_name} 已恢复调用",
-                {"tool": tool_name},
+            span_handle.set_attribute(
+                "tool.status",
+                "error" if text.lstrip().startswith("[error]") else "success",
             )
 
-        hint = self._budget.observe(session_id, len(text))
-        if hint:
-            self._queue_hint(session_id, hint)
-            await monitor.report_event("task_budget_hint", hint, {"tool": tool_name})
+            change = self._breaker.record(
+                permit,
+                success=not text.lstrip().startswith("[error]"),
+            )
+            if change == "opened":
+                await monitor.report_event(
+                    "tool_circuit_opened",
+                    f"{tool_name} 连续失败达到阈值，已暂停调用 {int(self._breaker.cooldown_seconds)}s",
+                    {"tool": tool_name},
+                )
+            elif change == "closed":
+                await monitor.report_event(
+                    "tool_circuit_closed",
+                    f"{tool_name} 已恢复调用",
+                    {"tool": tool_name},
+                )
 
-        if text != original:
-            return _replace_message_text(result, text)
-        return result
+            hint = self._budget.observe(session_id, len(text))
+            if hint:
+                self._queue_hint(session_id, hint)
+                await monitor.report_event(
+                    "task_budget_hint", hint, {"tool": tool_name}
+                )
+
+            if text != original:
+                return _replace_message_text(result, text)
+            return result
+        finally:
+            self._breaker.release(permit)
 
     # -- 模型调用前 -------------------------------------------------------
 
